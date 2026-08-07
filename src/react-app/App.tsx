@@ -153,7 +153,7 @@ export default function App() {
               {visibleEntries.map((e) => (
                 <article className="entry" key={e.id}>
                   <div className="entry-main">
-                    <div className="entry-title"><strong>{e.employee}</strong><span className={`badge status-${e.status.toLowerCase().replaceAll(' ', '-')}`}>{e.status}</span></div>
+                    <div className="entry-title"><strong>{e.employee}</strong><span className={`badge status-${e.status.toLowerCase().split(' ').join('-')}`}>{e.status}</span></div>
                     <div className="entry-meta"><span>{e.date}</span><span>{e.type}</span><span>{e.start}–{e.finish}</span><span>{e.totalHours.toFixed(2)} hrs</span></div>
                     {e.jobNumber && <div className="job">Job #{e.jobNumber}</div>}
                     {e.notes && <p>{e.notes}</p>}
