@@ -25,7 +25,7 @@ export class TimesheetStore{
  private async currentUser(req:Request){const token=parseCookie(req.headers.get('cookie'),'ec_session');if(!token)return null;const session=await this.state.storage.get<Session>(`session:${token}`);if(!session)return null;if(new Date(session.expiresAt).getTime()<Date.now()){await this.state.storage.delete(`session:${token}`);return null}const account=await this.state.storage.get<Account>(`account:${session.employeeId}`);if(!account?.active)return null;const employee=await this.effectiveEmployee(session.employeeId);return employee?{employee,account,token}:null}
  private sessionCookie(token:string,maxAge=60*60*24*14){return `ec_session=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`}
  private async setPassword(employeeId:string,password:string,mustChangePassword:boolean){const salt=randomHex(16),passwordHash=await hashPassword(password,salt);const existing=await this.state.storage.get<Account>(`account:${employeeId}`);const account:Account={employeeId,salt,passwordHash,createdAt:existing?.createdAt||new Date().toISOString(),active:true,mustChangePassword};await this.state.storage.put(`account:${employeeId}`,account);return account}
- private async requireAdmin(req:Request){const auth=await this.currentUser(req);if(!auth||auth.employee.role!=='admin')return null;return auth}
+ 
  async fetch(request:Request){
   const url=new URL(request.url),path=url.pathname;
   if(request.method==='POST'&&path==='/auth/bootstrap-admin'){
