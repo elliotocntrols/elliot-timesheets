@@ -4,129 +4,46 @@ import './App.css';
 type Role = 'staff' | 'pm' | 'admin';
 type WorkType = 'Work' | 'Annual Leave' | 'Sick Leave' | 'RDO' | 'Public Holiday' | 'Training' | 'Other Paid Leave';
 type Status = 'Submitted' | 'PM Approved' | 'Admin Approved' | 'Rejected';
+type User = { employeeId:string; name:string; email:string; role:Role; position:string; mustChangePassword:boolean };
+type StaffRow = { employeeId:string; name:string; email:string; position:string; role:Role; active:boolean; mustChangePassword:boolean };
+type Entry = { id:string; employeeId:string; employee:string; date:string; type:WorkType; jobNumber:string; start:string; finish:string; breakMinutes:number; totalHours:number; notes:string; status:Status; pmApprovedBy?:string; adminApprovedBy?:string; rejectionReason?:string; createdAt:string; simproStatus?:string };
+const workTypes:WorkType[]=['Work','Annual Leave','Sick Leave','RDO','Public Holiday','Training','Other Paid Leave'];
+function hoursBetween(start:string,finish:string,breakMinutes:number){if(!start||!finish)return 0;const[sh,sm]=start.split(':').map(Number),[fh,fm]=finish.split(':').map(Number);let mins=fh*60+fm-(sh*60+sm)-breakMinutes;if(mins<0)mins+=1440;return Math.max(0,Math.round(mins/60*100)/100)}
+function roleLabel(role:Role){return role==='pm'?'Project Manager':role==='admin'?'Office Admin':'Staff'}
+function statusClass(status:string){return status.toLowerCase().replace(/ /g,'-')}
+async function api<T>(path:string,init?:RequestInit):Promise<T>{const res=await fetch(path,{...init,credentials:'same-origin',headers:{'Content-Type':'application/json',...(init?.headers||{})}});const text=await res.text();if(!res.ok){let msg=text||'Request failed';try{msg=JSON.parse(text).error||msg}catch{}throw new Error(msg)}return(text?JSON.parse(text):{}) as T}
 
-type User = { employeeId: string; name: string; email: string; role: Role; position: string };
-type Entry = {
-  id: string; employeeId: string; employee: string; date: string; type: WorkType; jobNumber: string;
-  start: string; finish: string; breakMinutes: number; totalHours: number; notes: string; status: Status;
-  pmApprovedBy?: string; adminApprovedBy?: string; rejectionReason?: string; createdAt: string; simproStatus?: string;
-};
-
-const workTypes: WorkType[] = ['Work','Annual Leave','Sick Leave','RDO','Public Holiday','Training','Other Paid Leave'];
-
-function hoursBetween(start: string, finish: string, breakMinutes: number) {
-  if (!start || !finish) return 0;
-  const [sh, sm] = start.split(':').map(Number); const [fh, fm] = finish.split(':').map(Number);
-  let mins = fh * 60 + fm - (sh * 60 + sm) - breakMinutes; if (mins < 0) mins += 1440;
-  return Math.max(0, Math.round((mins / 60) * 100) / 100);
+export default function App(){
+ const[user,setUser]=useState<User|null>(null),[entries,setEntries]=useState<Entry[]>([]),[loading,setLoading]=useState(true),[message,setMessage]=useState('');
+ const[login,setLogin]=useState({identifier:'',password:''}),[showOfficeSetup,setShowOfficeSetup]=useState(false),[setup,setSetup]=useState({identifier:'',code:'',password:''});
+ const[password,setPassword]=useState({currentPassword:'',newPassword:''});
+ const[staff,setStaff]=useState<StaffRow[]>([]),[staffSearch,setStaffSearch]=useState(''),[temporary,setTemporary]=useState<{name:string;password:string}|null>(null);
+ const[form,setForm]=useState({date:new Date().toISOString().slice(0,10),type:'Work' as WorkType,jobNumber:'',start:'07:00',finish:'15:30',breakMinutes:30,notes:''});
+ const total=useMemo(()=>hoursBetween(form.start,form.finish,Number(form.breakMinutes)),[form]);
+ async function refresh(){const data=await api<{entries:Entry[]}>('/api/timesheets');setEntries(data.entries)}
+ async function loadStaff(){if(user?.role!=='admin')return;const data=await api<{staff:StaffRow[]}>('/api/admin/staff');setStaff(data.staff)}
+ async function loadSession(){try{const data=await api<{user:User}>('/api/auth/me');setUser(data.user);if(!data.user.mustChangePassword)await refresh()}catch{setUser(null);setEntries([])}finally{setLoading(false)}}
+ useEffect(()=>{loadSession()},[]);
+ useEffect(()=>{if(user?.role==='admin'&&!user.mustChangePassword)loadStaff()},[user?.role,user?.mustChangePassword]);
+ async function signIn(e:FormEvent){e.preventDefault();setMessage('');try{const data=await api<{user:User}>('/api/auth/login',{method:'POST',body:JSON.stringify(login)});setUser(data.user);setLogin({identifier:'',password:''});setMessage(`Signed in as ${data.user.name}.`);if(!data.user.mustChangePassword)await refresh()}catch(e){setMessage(e instanceof Error?e.message:'Could not sign in')}}
+ async function bootstrap(e:FormEvent){e.preventDefault();setMessage('');try{const data=await api<{user:User}>('/api/auth/bootstrap-admin',{method:'POST',body:JSON.stringify(setup)});setUser(data.user);setSetup({identifier:'',code:'',password:''});setShowOfficeSetup(false);setMessage('Office Admin account created.');await refresh()}catch(e){setMessage(e instanceof Error?e.message:'Could not complete Office setup')}}
+ async function changePassword(e:FormEvent){e.preventDefault();setMessage('');try{const data=await api<{user:User}>('/api/auth/change-password',{method:'POST',body:JSON.stringify(password)});setUser(data.user);setPassword({currentPassword:'',newPassword:''});setMessage('Password changed.');await refresh();if(data.user.role==='admin')await loadStaff()}catch(e){setMessage(e instanceof Error?e.message:'Could not change password')}}
+ async function logout(){await api('/api/auth/logout',{method:'POST'});setUser(null);setEntries([]);setStaff([]);setMessage('Signed out.')}
+ async function submit(e:FormEvent){e.preventDefault();setMessage('');if(form.type==='Work'&&!form.jobNumber.trim())return setMessage('Simpro job number is required for worked time.');if(total<=0)return setMessage('Check start and finish times.');try{await api('/api/timesheets',{method:'POST',body:JSON.stringify({...form,breakMinutes:Number(form.breakMinutes),totalHours:total})});setMessage('Timesheet submitted for PM approval.');setForm(f=>({...f,jobNumber:'',notes:''}));await refresh()}catch(e){setMessage(e instanceof Error?e.message:'Could not submit timesheet')}}
+ async function action(id:string,actionName:'pm-approve'|'admin-approve'|'reject'){let reason='';if(actionName==='reject')reason=window.prompt('Reason for rejection?')||'Rejected';try{await api(`/api/timesheets/${id}`,{method:'PATCH',body:JSON.stringify({action:actionName,reason})});await refresh()}catch(e){setMessage(e instanceof Error?e.message:'Could not update timesheet')}}
+ async function staffAction(employeeId:string,actionName:'activate'|'reset-password'|'deactivate'){setMessage('');setTemporary(null);try{const data=await api<{ok:boolean;tempPassword?:string;employee?:{name:string}}>(`/api/admin/staff/${employeeId}/${actionName}`,{method:'POST'});if(data.tempPassword&&data.employee)setTemporary({name:data.employee.name,password:data.tempPassword});setMessage(actionName==='deactivate'?'Account deactivated.':actionName==='activate'?'Account activated. Give the temporary password to the employee.':'Temporary password reset. Give the new password to the employee.');await loadStaff()}catch(e){setMessage(e instanceof Error?e.message:'Could not update staff account')}}
+ async function setRole(employeeId:string,role:Role){try{await api(`/api/admin/staff/${employeeId}/role`,{method:'PATCH',body:JSON.stringify({role})});setMessage('Staff role updated.');await loadStaff()}catch(e){setMessage(e instanceof Error?e.message:'Could not update role')}}
+ if(loading)return <div className="center-screen"><div className="loader-card"><strong>ELLIOT CONTROLS</strong><p>Loading timesheets…</p></div></div>;
+ if(!user)return <div className="auth-shell"><div className="auth-card"><div className="brand-kicker">ELLIOT CONTROLS</div><h1>Timesheets</h1><p className="muted">Staff sign in</p>{message&&<div className="message">{message}</div>}
+  {!showOfficeSetup?<><form onSubmit={signIn} className="auth-form"><label>Full name or email<input value={login.identifier} onChange={e=>setLogin({...login,identifier:e.target.value})} placeholder="e.g. Aiden Elliot" required autoComplete="username"/></label><label>Password<input type="password" value={login.password} onChange={e=>setLogin({...login,password:e.target.value})} required autoComplete="current-password"/></label><button className="primary" type="submit">Sign in</button></form><p className="small-note">Accounts are activated by Office Admin. You do not need your Simpro Employee ID.</p><button className="text-button" onClick={()=>{setShowOfficeSetup(true);setMessage('')}}>Office Admin setup</button></>
+  :<><form onSubmit={bootstrap} className="auth-form"><label>Office Admin name or email<input value={setup.identifier} onChange={e=>setSetup({...setup,identifier:e.target.value})} placeholder="Office Admin from staff list" required/></label><label>Private setup code<input type="password" value={setup.code} onChange={e=>setSetup({...setup,code:e.target.value})} required/></label><label>Create Office Admin password<input type="password" value={setup.password} onChange={e=>setSetup({...setup,password:e.target.value})} minLength={10} required/></label><button className="primary" type="submit">Complete Office setup</button></form><p className="small-note">This setup works once and requires the private code stored in Cloudflare.</p><button className="text-button" onClick={()=>{setShowOfficeSetup(false);setMessage('')}}>Back to staff sign in</button></>}</div></div>;
+ if(user.mustChangePassword)return <div className="auth-shell"><div className="auth-card"><div className="brand-kicker">ELLIOT CONTROLS</div><h1>Choose your password</h1><p className="muted">Hi {user.name}. Replace the temporary password Office gave you.</p>{message&&<div className="message">{message}</div>}<form onSubmit={changePassword} className="auth-form"><label>Temporary password<input type="password" value={password.currentPassword} onChange={e=>setPassword({...password,currentPassword:e.target.value})} required/></label><label>New password<input type="password" value={password.newPassword} onChange={e=>setPassword({...password,newPassword:e.target.value})} minLength={10} required/></label><button className="primary" type="submit">Save my password</button></form><button className="text-button" onClick={logout}>Sign out</button></div></div>;
+ const myEntries=entries.filter(e=>e.employeeId===user.employeeId);const queue=user.role==='pm'?entries.filter(e=>e.status==='Submitted'&&e.employeeId!==user.employeeId):user.role==='admin'?entries.filter(e=>e.status==='PM Approved'):[];
+ const filteredStaff=staff.filter(s=>`${s.name} ${s.email} ${s.position}`.toLowerCase().includes(staffSearch.toLowerCase()));
+ return <div className="app-shell"><header className="topbar"><div><div className="brand-kicker">ELLIOT CONTROLS</div><h1>Timesheets</h1></div><div className="account"><div><strong>{user.name}</strong><span>{roleLabel(user.role)}</span></div><button onClick={logout}>Sign out</button></div></header><main className="page">{message&&<div className="message">{message}</div>}
+  <section className="card"><div className="section-head"><div><span className="eyebrow">NEW ENTRY</span><h2>Enter time</h2></div><strong>{total.toFixed(2)} hrs</strong></div><form onSubmit={submit} className="form-grid"><label>Date<input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></label><label>Type<select value={form.type} onChange={e=>{const type=e.target.value as WorkType;setForm({...form,type,breakMinutes:type==='Work'?30:0,jobNumber:type==='Work'?form.jobNumber:''})}}>{workTypes.map(t=><option key={t}>{t}</option>)}</select></label>{form.type==='Work'&&<label className="wide">Simpro job number *<input value={form.jobNumber} onChange={e=>setForm({...form,jobNumber:e.target.value})} placeholder="Required" inputMode="numeric"/></label>}<label>Start<input type="time" value={form.start} onChange={e=>setForm({...form,start:e.target.value})}/></label><label>Finish<input type="time" value={form.finish} onChange={e=>setForm({...form,finish:e.target.value})}/></label><label>Break (minutes)<input type="number" min="0" max="240" value={form.breakMinutes} onChange={e=>setForm({...form,breakMinutes:Number(e.target.value)})}/></label><label className="wide">Notes<input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Optional"/></label><button className="primary wide" type="submit">Submit timesheet</button></form></section>
+  {user.role!=='staff'&&<section className="card"><div className="section-head"><div><span className="eyebrow">{user.role==='pm'?'PM APPROVAL QUEUE':'OFFICE ADMIN QUEUE'}</span><h2>Waiting for your approval</h2></div><button className="ghost" onClick={refresh}>Refresh</button></div>{queue.length===0?<p className="muted">Nothing waiting for approval.</p>:<div className="entry-list">{queue.map(e=><EntryCard key={e.id} entry={e} user={user} action={action}/>)}</div>}</section>}
+  {user.role==='admin'&&<section className="card"><div className="section-head"><div><span className="eyebrow">OFFICE ADMIN</span><h2>Manage staff accounts</h2></div><button className="ghost" onClick={loadStaff}>Refresh</button></div><input className="staff-search" value={staffSearch} onChange={e=>setStaffSearch(e.target.value)} placeholder="Search name, email or position"/>{temporary&&<div className="temporary"><strong>Temporary password for {temporary.name}</strong><code>{temporary.password}</code><span>Copy this now. It is only shown after activation/reset.</span></div>}<div className="staff-list">{filteredStaff.map(s=><div className="staff-row" key={s.employeeId}><div className="staff-person"><strong>{s.name}</strong><span>{s.position||'No position'} • Simpro #{s.employeeId}</span><span>{s.email}</span></div><div className="staff-controls"><select value={s.role} onChange={e=>setRole(s.employeeId,e.target.value as Role)} aria-label={`Role for ${s.name}`}><option value="staff">Staff</option><option value="pm">Project Manager</option><option value="admin">Office Admin</option></select><span className={`account-status ${s.active?'active':'inactive'}`}>{s.active?(s.mustChangePassword?'Temp password issued':'Active'):'Not activated'}</span>{s.active?<><button className="ghost" onClick={()=>staffAction(s.employeeId,'reset-password')}>Reset password</button><button className="danger" onClick={()=>staffAction(s.employeeId,'deactivate')}>Deactivate</button></>:<button className="primary" onClick={()=>staffAction(s.employeeId,'activate')}>Activate</button>}</div></div>)}</div></section>}
+  <section className="card"><div className="section-head"><div><span className="eyebrow">MY TIMESHEETS</span><h2>Recent entries</h2></div><button className="ghost" onClick={refresh}>Refresh</button></div>{myEntries.length===0?<p className="muted">No timesheets yet.</p>:<div className="entry-list">{myEntries.map(e=><EntryCard key={e.id} entry={e} user={user} action={action}/>)}</div>}</section><footer>Office-managed staff accounts • Simpro employee IDs linked in the background • Live Simpro posting awaits API approval.</footer></main></div>
 }
-function roleLabel(role: Role) { return role === 'pm' ? 'Project Manager' : role === 'admin' ? 'Office Admin' : 'Staff'; }
-function statusClass(status: string) { return status.toLowerCase().replace(/ /g, '-'); }
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { ...init, credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) } });
-  const text = await res.text();
-  if (!res.ok) { try { throw new Error(JSON.parse(text).error || 'Request failed'); } catch (e) { if (e instanceof Error && e.message !== 'Unexpected end of JSON input') throw e; throw new Error(text || 'Request failed'); } }
-  return (text ? JSON.parse(text) : {}) as T;
-}
-
-export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [authMode, setAuthMode] = useState<'login'|'activate'>('login');
-  const [auth, setAuth] = useState({ employeeId:'', email:'', password:'' });
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [loading, setLoading] = useState(true); const [message, setMessage] = useState('');
-  const [form, setForm] = useState({ date:new Date().toISOString().slice(0,10), type:'Work' as WorkType, jobNumber:'', start:'07:00', finish:'15:30', breakMinutes:30, notes:'' });
-  const total = useMemo(() => hoursBetween(form.start, form.finish, Number(form.breakMinutes)), [form]);
-
-  async function loadSession() {
-    try { const data = await api<{user:User}>('/api/auth/me'); setUser(data.user); await refresh(); }
-    catch { setUser(null); setEntries([]); }
-    finally { setLoading(false); }
-  }
-  useEffect(() => { loadSession(); }, []);
-
-  async function refresh() {
-    const data = await api<{entries:Entry[]}>('/api/timesheets'); setEntries(data.entries);
-  }
-
-  async function authenticate(e: FormEvent) {
-    e.preventDefault(); setMessage('');
-    try {
-      const data = await api<{user:User}>(authMode === 'login' ? '/api/auth/login' : '/api/auth/register', { method:'POST', body:JSON.stringify(auth) });
-      setUser(data.user); setAuth({ employeeId:'', email:'', password:'' }); setMessage(`Signed in as ${data.user.name}.`); await refresh();
-    } catch (e) { setMessage(e instanceof Error ? e.message : 'Could not sign in'); }
-  }
-  async function logout() { await api('/api/auth/logout',{method:'POST'}); setUser(null); setEntries([]); setMessage('Signed out.'); }
-
-  async function submit(e: FormEvent) {
-    e.preventDefault(); setMessage('');
-    if (form.type === 'Work' && !form.jobNumber.trim()) return setMessage('Simpro job number is required for worked time.');
-    if (total <= 0) return setMessage('Check start and finish times.');
-    try {
-      await api('/api/timesheets',{method:'POST',body:JSON.stringify({...form,breakMinutes:Number(form.breakMinutes),totalHours:total})});
-      setMessage('Timesheet submitted for PM approval.'); setForm(f=>({...f,jobNumber:'',notes:''})); await refresh();
-    } catch (e) { setMessage(e instanceof Error ? e.message : 'Could not submit timesheet'); }
-  }
-
-  async function action(id:string, actionName:'pm-approve'|'admin-approve'|'reject') {
-    let reason=''; if (actionName==='reject') reason=window.prompt('Reason for rejection?') || 'Rejected';
-    try { await api(`/api/timesheets/${id}`,{method:'PATCH',body:JSON.stringify({action:actionName,reason})}); await refresh(); }
-    catch (e) { setMessage(e instanceof Error ? e.message : 'Could not update timesheet'); }
-  }
-
-  if (loading) return <div className="center-screen"><div className="loader-card"><strong>ELLIOT CONTROLS</strong><p>Loading timesheets…</p></div></div>;
-
-  if (!user) return (
-    <div className="auth-shell">
-      <div className="auth-card">
-        <div className="brand-kicker">ELLIOT CONTROLS</div><h1>Timesheets</h1><p className="muted">Secure staff access</p>
-        <div className="auth-tabs"><button className={authMode==='login'?'active':''} onClick={()=>setAuthMode('login')}>Sign in</button><button className={authMode==='activate'?'active':''} onClick={()=>setAuthMode('activate')}>First-time activation</button></div>
-        {message && <div className="message">{message}</div>}
-        <form onSubmit={authenticate} className="auth-form">
-          {authMode==='activate' && <label>Simpro Employee ID<input value={auth.employeeId} onChange={e=>setAuth({...auth,employeeId:e.target.value})} inputMode="numeric" placeholder="e.g. 441" required /></label>}
-          <label>Email address<input type="email" value={auth.email} onChange={e=>setAuth({...auth,email:e.target.value})} placeholder="Your email from Simpro" required /></label>
-          <label>{authMode==='activate'?'Create password':'Password'}<input type="password" value={auth.password} onChange={e=>setAuth({...auth,password:e.target.value})} minLength={8} required /></label>
-          <button className="primary" type="submit">{authMode==='activate'?'Activate my account':'Sign in'}</button>
-        </form>
-        {authMode==='activate' && <p className="small-note">Use the Employee ID and email stored against your employee record in Simpro. You only do this once.</p>}
-      </div>
-    </div>
-  );
-
-  const myEntries = entries.filter(e=>e.employeeId===user.employeeId);
-  const queue = user.role==='pm' ? entries.filter(e=>e.status==='Submitted' && e.employeeId!==user.employeeId) : user.role==='admin' ? entries.filter(e=>e.status==='PM Approved') : [];
-
-  return <div className="app-shell">
-    <header className="topbar"><div><div className="brand-kicker">ELLIOT CONTROLS</div><h1>Timesheets</h1></div><div className="account"><div><strong>{user.name}</strong><span>{roleLabel(user.role)}</span></div><button onClick={logout}>Sign out</button></div></header>
-    <main className="page">
-      {message && <div className="message">{message}</div>}
-      <section className="card">
-        <div className="section-head"><div><span className="eyebrow">NEW ENTRY</span><h2>Enter time</h2></div><strong>{total.toFixed(2)} hrs</strong></div>
-        <form onSubmit={submit} className="form-grid">
-          <label>Date<input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></label>
-          <label>Type<select value={form.type} onChange={e=>{const type=e.target.value as WorkType;setForm({...form,type,breakMinutes:type==='Work'?30:0,jobNumber:type==='Work'?form.jobNumber:''})}}>{workTypes.map(t=><option key={t}>{t}</option>)}</select></label>
-          {form.type==='Work' && <label className="wide">Simpro job number *<input value={form.jobNumber} onChange={e=>setForm({...form,jobNumber:e.target.value})} placeholder="Required" inputMode="numeric"/></label>}
-          <label>Start<input type="time" value={form.start} onChange={e=>setForm({...form,start:e.target.value})}/></label>
-          <label>Finish<input type="time" value={form.finish} onChange={e=>setForm({...form,finish:e.target.value})}/></label>
-          <label>Break (minutes)<input type="number" min="0" max="240" value={form.breakMinutes} onChange={e=>setForm({...form,breakMinutes:Number(e.target.value)})}/></label>
-          <label className="wide">Notes<input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Optional"/></label>
-          <button className="primary wide" type="submit">Submit timesheet</button>
-        </form>
-      </section>
-
-      {user.role!=='staff' && <section className="card"><div className="section-head"><div><span className="eyebrow">{user.role==='pm'?'PM APPROVAL QUEUE':'OFFICE ADMIN QUEUE'}</span><h2>Waiting for your approval</h2></div><button className="ghost" onClick={refresh}>Refresh</button></div>
-        {queue.length===0?<p className="muted">Nothing waiting for approval.</p>:<div className="entry-list">{queue.map(e=><EntryCard key={e.id} entry={e} user={user} action={action}/>)}</div>}
-      </section>}
-
-      <section className="card"><div className="section-head"><div><span className="eyebrow">MY TIMESHEETS</span><h2>Recent entries</h2></div><button className="ghost" onClick={refresh}>Refresh</button></div>
-        {myEntries.length===0?<p className="muted">No timesheets yet.</p>:<div className="entry-list">{myEntries.map(e=><EntryCard key={e.id} entry={e} user={user} action={action}/>)}</div>}
-      </section>
-      <footer>Secure account version • Simpro employee ID linked • Live Simpro posting will be enabled after API approval.</footer>
-    </main>
-  </div>;
-}
-
-function EntryCard({entry:e,user,action}:{entry:Entry;user:User;action:(id:string,a:'pm-approve'|'admin-approve'|'reject')=>void}) {
-  return <article className="entry"><div className="entry-main"><div className="entry-title"><strong>{e.employee}</strong><span className={`badge status-${statusClass(e.status)}`}>{e.status}</span></div><div className="entry-meta"><span>{e.date}</span><span>{e.type}</span><span>{e.start}–{e.finish}</span><span>{e.totalHours.toFixed(2)} hrs</span></div>{e.jobNumber&&<div className="job">Job #{e.jobNumber}</div>}{e.notes&&<p>{e.notes}</p>}{e.rejectionReason&&<p className="rejected">Reason: {e.rejectionReason}</p>}{e.status==='Admin Approved'&&<p className="simpro">Simpro: {e.simproStatus||'Awaiting API connection'}</p>}</div><div className="actions">{user.role==='pm'&&e.status==='Submitted'&&e.employeeId!==user.employeeId&&<><button className="primary" onClick={()=>action(e.id,'pm-approve')}>PM approve</button><button className="danger" onClick={()=>action(e.id,'reject')}>Reject</button></>}{user.role==='admin'&&e.status==='PM Approved'&&<><button className="primary" onClick={()=>action(e.id,'admin-approve')}>Final approve</button><button className="danger" onClick={()=>action(e.id,'reject')}>Reject</button></>}</div></article>
-}
+function EntryCard({entry,user,action}:{entry:Entry;user:User;action:(id:string,a:'pm-approve'|'admin-approve'|'reject')=>void}){return <div className="entry"><div><div className="entry-title"><strong>{entry.employee}</strong><span className={`badge status-${statusClass(entry.status)}`}>{entry.status}</span></div><div className="entry-meta"><span>{entry.date}</span><span>{entry.type}</span><span>{entry.start}–{entry.finish}</span><span>{entry.totalHours.toFixed(2)} hrs</span></div>{entry.jobNumber&&<div className="job">Job #{entry.jobNumber}</div>}{entry.notes&&<p>{entry.notes}</p>}{entry.status==='Admin Approved'&&<p className="simpro">Simpro: {entry.simproStatus||'Awaiting API connection'}</p>}{entry.rejectionReason&&<p className="rejected">Rejected: {entry.rejectionReason}</p>}</div><div className="actions">{user.role==='pm'&&entry.status==='Submitted'&&entry.employeeId!==user.employeeId&&<><button className="primary" onClick={()=>action(entry.id,'pm-approve')}>PM approve</button><button className="danger" onClick={()=>action(entry.id,'reject')}>Reject</button></>}{user.role==='admin'&&entry.status==='PM Approved'&&<><button className="primary" onClick={()=>action(entry.id,'admin-approve')}>Final approve</button><button className="danger" onClick={()=>action(entry.id,'reject')}>Reject</button></>}</div></div>}
