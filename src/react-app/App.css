@@ -27,3 +27,32 @@
     padding: 0 16px;
   }
 }
+/* Fix login page appearing off-screen */
+html,
+body,
+#root {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.auth-shell {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  min-width: 0 !important;
+  min-height: 100vh !important;
+  min-height: 100dvh !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow-x: hidden !important;
+  padding: 20px !important;
+}
+
+.auth-card {
+  width: 100% !important;
+  max-width: 460px !important;
+  margin: 0 auto !important;
+}
