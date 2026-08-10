@@ -23,7 +23,19 @@ export default function App(){
  async function refresh(){const data=await api<{entries:Entry[]}>('/api/timesheets');setEntries(data.entries)}
  async function loadStaff(){if(user?.role!=='admin')return;const data=await api<{staff:StaffRow[]}>('/api/admin/staff');setStaff(data.staff)}
  async function loadSession(){try{const data=await api<{user:User}>('/api/auth/me');setUser(data.user);if(!data.user.mustChangePassword)await refresh()}catch{setUser(null);setEntries([])}finally{setLoading(false)}}
- useEffect(()=>{loadSession()},[]);
+ useEffect(()=>{
+  document.title='Elliot Timesheets';
+  const ensureLink=(rel:string,href:string)=>{let el=document.querySelector(`link[rel="${rel}"]`) as HTMLLinkElement|null;if(!el){el=document.createElement('link');el.rel=rel;document.head.appendChild(el)}el.href=href};
+  const ensureMeta=(name:string,content:string)=>{let el=document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement|null;if(!el){el=document.createElement('meta');el.name=name;document.head.appendChild(el)}el.content=content};
+  ensureLink('manifest','/manifest.webmanifest');
+  ensureLink('apple-touch-icon','/icons/apple-touch-icon.png');
+  ensureMeta('theme-color','#0f1b26');
+  ensureMeta('apple-mobile-web-app-capable','yes');
+  ensureMeta('apple-mobile-web-app-status-bar-style','black-translucent');
+  ensureMeta('apple-mobile-web-app-title','Elliot Timesheets');
+  if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(()=>{});}
+  loadSession();
+ },[]);
  useEffect(()=>{if(user?.role==='admin'&&!user.mustChangePassword)loadStaff()},[user?.role,user?.mustChangePassword]);
  async function signIn(e:FormEvent){e.preventDefault();setMessage('');try{const data=await api<{user:User}>('/api/auth/login',{method:'POST',body:JSON.stringify(login)});setUser(data.user);setLogin({identifier:'',password:''});setMessage(`Signed in as ${data.user.name}.`);if(!data.user.mustChangePassword)await refresh()}catch(e){setMessage(e instanceof Error?e.message:'Could not sign in')}}
  async function bootstrap(e:FormEvent){e.preventDefault();setMessage('');try{const data=await api<{user:User}>('/api/auth/bootstrap-admin',{method:'POST',body:JSON.stringify(setup)});setUser(data.user);setSetup({identifier:'',code:'',password:''});setShowOfficeSetup(false);setMessage('Office Admin account created.');await refresh()}catch(e){setMessage(e instanceof Error?e.message:'Could not complete Office setup')}}
