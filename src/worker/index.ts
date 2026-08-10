@@ -12,7 +12,7 @@ const enc=new TextEncoder();
 function bytesToHex(bytes:ArrayBuffer){return Array.from(new Uint8Array(bytes)).map(b=>b.toString(16).padStart(2,'0')).join('')}
 function randomHex(bytes=32){const a=new Uint8Array(bytes);crypto.getRandomValues(a);return Array.from(a).map(b=>b.toString(16).padStart(2,'0')).join('')}
 function temporaryPassword(){const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';const a=new Uint8Array(14);crypto.getRandomValues(a);return Array.from(a).map(n=>alphabet[n%alphabet.length]).join('')}
-async function hashPassword(password:string,salt:string){const key=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:enc.encode(salt),iterations:150000,hash:'SHA-256'},key,256);return bytesToHex(bits)}
+async function hashPassword(password:string,salt:string){const key=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:enc.encode(salt),iterations:100000,hash:'SHA-256'},key,256);return bytesToHex(bits)}
 function parseCookie(header:string|null,name:string){if(!header)return'';for(const part of header.split(';')){const [k,...v]=part.trim().split('=');if(k===name)return decodeURIComponent(v.join('='))}return''}
 function baseEmployeeById(id:string){return EMPLOYEES.find(e=>e.id===id)}
 
