@@ -83,55 +83,84 @@ export class TimesheetStore{
  }
 }
 const app=new Hono<{Bindings:Bindings}>();
+app.get('/api/simpro-jobs',async c=>{
+ const apiKey=c.env.SIMPRO_API_KEY;
+ if(!apiKey)return c.json({ok:false,error:'SIMPRO_API_KEY is not configured'},500);
+
+ const cache=caches.default;
+ const cacheKey=new Request('https://elliot-timesheets.internal/simpro-jobs');
+ const cached=await cache.match(cacheKey);
+ if(cached)return new Response(cached.body,cached);
+
+ try{
+  const base='https://elliotcontrols.simprosuite.com/api/v1.0/companies/0/jobs/';
+  const makeUrl=(page:number)=>{
+   const u=new URL(base);
+   u.searchParams.set('pageSize','250');
+   u.searchParams.set('page',String(page));
+   u.searchParams.set('orderby','-ID');
+   u.searchParams.set('columns','ID,Name,Site,Customer,CompletedDate,ArchiveReason');
+   return u.toString();
+  };
+  const headers={Authorization:`Bearer ${apiKey}`,Accept:'application/json'};
+  const first=await fetch(makeUrl(1),{headers});
+  if(!first.ok)return c.json({ok:false,error:'Unable to load Simpro jobs',status:first.status},502);
+
+  const firstRows:any[]=await first.json();
+  const resultPages=Math.max(1,Number(first.headers.get('Result-Pages')||'1'));
+  const maxPages=Math.min(resultPages,20);
+  const rows:any[]=[...firstRows];
+
+  for(let start=2;start<=maxPages;start+=4){
+   const pages:number[]=[];
+   for(let p=start;p<start+4&&p<=maxPages;p++)pages.push(p);
+   const responses=await Promise.all(pages.map(p=>fetch(makeUrl(p),{headers})));
+   for(const response of responses){
+    if(!response.ok)continue;
+    const pageRows:any[]=await response.json();
+    rows.push(...pageRows);
+   }
+  }
+
+  const jobs=rows
+   .filter(j=>!j.CompletedDate&&!j.ArchiveReason)
+   .map(j=>({
+    id:Number(j.ID),
+    name:String(j.Name||''),
+    site:String(j.Site?.Name||''),
+    customer:String(j.Customer?.CompanyName||j.Customer?.Name||'')
+   }))
+   .filter(j=>Number.isFinite(j.id))
+   .sort((a,b)=>b.id-a.id);
+
+  const body=JSON.stringify({ok:true,jobs,truncated:resultPages>maxPages});
+  const response=new Response(body,{
+   headers:{
+    'content-type':'application/json; charset=utf-8',
+    'cache-control':'public, max-age=300'
+   }
+  });
+  c.executionCtx.waitUntil(cache.put(cacheKey,response.clone()));
+  return response;
+ }catch{
+  return c.json({ok:false,error:'Unable to contact Simpro'},502);
+ }
+});
+
 app.get('/api/simpro-job/:jobId',async c=>{
  const apiKey=c.env.SIMPRO_API_KEY;
  const jobId=c.req.param('jobId').trim();
-
- if(!apiKey){
-  return c.json({ok:false,error:'SIMPRO_API_KEY is not configured'},500);
- }
-
- if(!/^\d+$/.test(jobId)){
-  return c.json({ok:false,error:'Invalid Simpro job number'},400);
- }
-
+ if(!apiKey)return c.json({ok:false,error:'SIMPRO_API_KEY is not configured'},500);
+ if(!/^\d+$/.test(jobId))return c.json({ok:false,error:'Invalid Simpro job number'},400);
  try{
-  const response=await fetch(
-   `https://elliotcontrols.simprosuite.com/api/v1.0/companies/0/jobs/${jobId}`,
-   {
-    method:'GET',
-    headers:{
-     Authorization:`Bearer ${apiKey}`,
-     Accept:'application/json'
-    }
-   }
-  );
-
-  if(response.status===404){
-   return c.json({ok:false,exists:false,error:'Simpro job not found'},404);
-  }
-
-  if(!response.ok){
-   return c.json({
-    ok:false,
-    error:'Unable to check Simpro job',
-    status:response.status
-   },502);
-  }
-
-  const job:any=await response.json();
-
-  return c.json({
-   ok:true,
-   exists:true,
-   job:{
-    id:job.ID,
-    type:job.Type,
-    name:job.Name||'',
-    site:job.Site?.Name||'',
-    customer:job.Customer?.CompanyName||job.Customer?.Name||''
-   }
+  const response=await fetch(`https://elliotcontrols.simprosuite.com/api/v1.0/companies/0/jobs/${jobId}`,{
+   method:'GET',
+   headers:{Authorization:`Bearer ${apiKey}`,Accept:'application/json'}
   });
+  if(response.status===404)return c.json({ok:false,exists:false,error:'Simpro job not found'},404);
+  if(!response.ok)return c.json({ok:false,error:'Unable to check Simpro job',status:response.status},502);
+  const job:any=await response.json();
+  return c.json({ok:true,exists:true,job:{id:job.ID,type:job.Type,name:job.Name||'',site:job.Site?.Name||'',customer:job.Customer?.CompanyName||job.Customer?.Name||''}});
  }catch{
   return c.json({ok:false,error:'Unable to contact Simpro'},502);
  }
