@@ -480,3 +480,214 @@ input:focus,select:focus{
   .workday-pills{width:100%}
   .workday-pills button{flex:1;min-width:38px}
 }
+
+
+
+/* Simpro Safe Mode */
+.simpro-safe{
+  margin-top:12px;
+  padding:13px;
+  border-radius:14px;
+  border:1px solid #dce5eb;
+  background:#f7f9fb;
+}
+.simpro-safe.ready{border-color:#bfe6d2;background:#edf9f3}
+.simpro-safe.blocked{border-color:#f0d1d1;background:#fff5f5}
+.simpro-safe-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.simpro-safe-head strong{color:#173a2a}
+.simpro-safe.blocked .simpro-safe-head strong{color:#9b2626}
+.simpro-safe-head span{font-size:11px;font-weight:900;border-radius:999px;padding:6px 8px;background:rgba(255,255,255,.7)}
+.simpro-safe p{font-size:12px;margin:8px 0;color:#52616d}
+.simpro-preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.simpro-preview-grid span{display:block;background:rgba(255,255,255,.72);border:1px solid rgba(20,36,49,.07);border-radius:10px;padding:9px;font-size:12px;font-weight:750}
+.simpro-preview-grid small{display:block;color:#74828d;text-transform:uppercase;letter-spacing:.08em;font-size:9px;margin-bottom:3px}
+.duplicate-warning{display:inline-block;margin-top:9px;color:#a32020;background:#fee8e8;border-radius:999px;padding:6px 9px;font-size:11px}
+.simpro-recheck{margin-top:10px}
+@media(max-width:600px){.simpro-preview-grid{grid-template-columns:1fr}.simpro-safe-head{align-items:flex-start;flex-direction:column}}
+
+
+
+/* Submitted/rejected timesheet editing */
+.editing-mode{
+  border-color:rgba(45,121,255,.28)!important;
+  box-shadow:0 20px 50px rgba(45,121,255,.10)!important;
+}
+.edit-banner{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin:-4px 0 16px;
+  padding:11px 13px;
+  border-radius:13px;
+  background:#eef5ff;
+  border:1px solid #d2e3ff;
+  color:#174d94;
+  font-size:13px;
+  font-weight:800;
+}
+.edit-banner .ghost{background:#fff}
+@media(max-width:600px){
+  .edit-banner{align-items:stretch;flex-direction:column}
+  .edit-banner button{width:100%}
+}
+
+
+
+/* =========================================================
+   Mobile quick-entry: normal day fits without scrolling
+   ========================================================= */
+.notes-details{
+  border:1px solid #e2e8ed;
+  border-radius:12px;
+  background:#f8fafb;
+  overflow:hidden;
+}
+.notes-details summary{
+  cursor:pointer;
+  padding:10px 12px;
+  font-size:12px;
+  font-weight:850;
+  color:#53616c;
+  list-style:none;
+}
+.notes-details summary::-webkit-details-marker{display:none}
+.notes-details summary span{font-weight:500;color:#8a969f}
+.notes-details[open] summary{border-bottom:1px solid #e7edf1}
+.notes-details label{padding:10px 12px 12px}
+.notes-details input{min-height:42px}
+
+@media(max-width:600px){
+  /* Header stays usable but takes much less vertical space */
+  .topbar{
+    min-height:88px!important;
+    padding-top:calc(env(safe-area-inset-top,44px) + 8px)!important;
+    padding-bottom:10px!important;
+  }
+  .brand-mark{width:34px;height:34px;border-radius:10px}
+  .topbar h1{font-size:21px!important;margin-top:1px}
+  .brand-kicker{font-size:9px!important}
+  .signout-button{min-height:38px!important;padding:7px 10px!important}
+
+  .page{
+    padding-top:8px!important;
+    padding-bottom:84px!important;
+  }
+
+  /* Keep the time card compact */
+  .hero-entry{
+    padding:12px!important;
+    border-radius:16px!important;
+    margin-bottom:10px!important;
+  }
+  .today-strip{
+    margin-bottom:8px!important;
+    align-items:center!important;
+  }
+  .today-strip h2{
+    font-size:18px!important;
+    margin-top:1px!important;
+  }
+  .entry-subtitle{display:none}
+  .hours-orb{
+    min-width:64px!important;
+    min-height:64px!important;
+    width:64px!important;
+    height:64px!important;
+    padding:5px!important;
+    border-radius:16px!important;
+  }
+  .hours-orb span,.hours-orb small{font-size:7px!important}
+  .hours-orb strong{font-size:20px!important;margin:1px 0!important}
+
+  .simple-form{gap:8px!important}
+
+  /* One horizontal row instead of a tall grid of work types */
+  .type-pills{
+    display:flex!important;
+    flex-wrap:nowrap!important;
+    overflow-x:auto!important;
+    gap:5px!important;
+    padding-bottom:1px;
+    scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
+  }
+  .type-pills::-webkit-scrollbar{display:none}
+  .type-pills button{
+    flex:0 0 auto!important;
+    width:auto!important;
+    min-height:34px!important;
+    padding:6px 9px!important;
+    font-size:11px!important;
+    border-radius:10px!important;
+  }
+
+  /* Search is enough on phone; recent-job chips would take another row */
+  .mobile-optional{display:none!important}
+
+  .job-picker input{
+    min-height:43px!important;
+    padding:9px 11px!important;
+    font-size:16px!important;
+  }
+  .job-ok{
+    margin-top:4px!important;
+    padding:4px 7px!important;
+    font-size:10px!important;
+  }
+
+  /* Start / finish / break all stay on one row */
+  .time-row{
+    display:grid!important;
+    grid-template-columns:1fr 1fr .78fr!important;
+    gap:6px!important;
+  }
+  .time-row label{font-size:10px!important;gap:3px!important}
+  .time-row input{
+    min-height:42px!important;
+    padding:7px 6px!important;
+    font-size:14px!important;
+    border-radius:10px!important;
+  }
+  .field-hint{display:none}
+
+  /* Notes available, but collapsed by default */
+  .notes-details summary{padding:7px 9px!important}
+  .notes-details label{padding:7px 9px 9px!important}
+  .notes-details input{min-height:39px!important}
+
+  /* Always reachable without scrolling */
+  .submit-day{
+    position:fixed!important;
+    left:11px!important;
+    right:11px!important;
+    bottom:calc(8px + env(safe-area-inset-bottom,0px))!important;
+    width:auto!important;
+    min-height:54px!important;
+    z-index:200!important;
+    border-radius:15px!important;
+    box-shadow:0 16px 36px rgba(15,31,43,.25)!important;
+  }
+
+  /* The dropdown floats over content rather than pushing it down */
+  .job-menu{
+    max-height:46vh!important;
+    z-index:500!important;
+  }
+
+  .edit-banner{
+    margin:0 0 8px!important;
+    padding:7px 9px!important;
+    font-size:11px!important;
+  }
+}
+
+/* Extra-small iPhones */
+@media(max-width:390px){
+  .hero-entry{padding:10px!important}
+  .today-strip h2{font-size:16px!important}
+  .hours-orb{width:58px!important;height:58px!important;min-width:58px!important;min-height:58px!important}
+  .type-pills button{font-size:10px!important;padding:5px 7px!important}
+  .time-row{gap:4px!important}
+  .time-row input{font-size:13px!important;padding-left:4px!important;padding-right:4px!important}
+}

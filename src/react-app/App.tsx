@@ -7,7 +7,7 @@ type Status='Submitted'|'PM Approved'|'Admin Approved'|'Rejected';
 type User={employeeId:string;name:string;email:string;role:Role;position:string;mustChangePassword:boolean};
 type StaffRow={employeeId:string;name:string;email:string;position:string;role:Role;active:boolean;mustChangePassword:boolean;workDays:number[]};
 type JobOption={id:number;name:string;site:string;customer:string};
-type Entry={id:string;employeeId:string;employee:string;date:string;type:WorkType;jobNumber:string;start:string;finish:string;breakMinutes:number;totalHours:number;notes:string;status:Status;pmApprovedBy?:string;adminApprovedBy?:string;rejectionReason?:string;createdAt:string;simproStatus?:string};
+type Entry={id:string;employeeId:string;employee:string;date:string;type:WorkType;jobNumber:string;start:string;finish:string;breakMinutes:number;totalHours:number;notes:string;status:Status;pmApprovedBy?:string;adminApprovedBy?:string;rejectionReason?:string;createdAt:string;simproStatus?:string;simproPreview?:{mode:'safe';checkedAt:string;employeeId:string;employeeName:string;jobId:string;jobName:string;date:string;start:string;finish:string;totalHours:number;duplicate:boolean;ready:boolean;message:string}};
 
 const workTypes:WorkType[]=['Work','Annual Leave','Sick Leave','RDO','Public Holiday','Training','Other Paid Leave'];
 
@@ -36,6 +36,7 @@ export default function App(){
  const[dashboardSearch,setDashboardSearch]=useState(''),[dashboardFilter,setDashboardFilter]=useState<'all'|'missing'|'attention'|'ready'|'complete'>('all'),[bulkWorking,setBulkWorking]=useState(false);
  const[jobs,setJobs]=useState<JobOption[]>([]),[jobsLoading,setJobsLoading]=useState(false),[jobSearch,setJobSearch]=useState(''),[jobMenuOpen,setJobMenuOpen]=useState(false),[jobValid,setJobValid]=useState(false);
  const[form,setForm]=useState({date:new Date().toISOString().slice(0,10),type:'Work' as WorkType,jobNumber:'',start:'07:00',finish:'15:30',breakMinutes:30,notes:''});
+ const[editingEntryId,setEditingEntryId]=useState<string|null>(null);
  const total=useMemo(()=>hoursBetween(form.start,form.finish,Number(form.breakMinutes)),[form]);
 
  async function refresh(){const data=await api<{entries:Entry[]}>('/api/timesheets');setEntries(data.entries)}
@@ -74,15 +75,63 @@ export default function App(){
   if(form.type==='Work'&&!jobValid)return setMessage('Please choose a job from the Simpro job list.');
   if(total<=0)return setMessage('Check start and finish times.');
   try{
-   await api('/api/timesheets',{method:'POST',body:JSON.stringify({...form,breakMinutes:Number(form.breakMinutes),totalHours:total})});
-   setMessage('Day submitted for approval.');
-   setForm(f=>({...f,jobNumber:'',notes:''}));setJobSearch('');setJobValid(false);await refresh();
-  }catch(e){setMessage(e instanceof Error?e.message:'Could not submit timesheet')}
+   if(editingEntryId){
+    await api(`/api/timesheets/${editingEntryId}`,{method:'PATCH',body:JSON.stringify({action:'edit',...form,breakMinutes:Number(form.breakMinutes),totalHours:total})});
+    setMessage('Timesheet updated and resubmitted for PM approval.');
+   }else{
+    await api('/api/timesheets',{method:'POST',body:JSON.stringify({...form,breakMinutes:Number(form.breakMinutes),totalHours:total})});
+    setMessage('Day submitted for approval.');
+   }
+   setForm(f=>({...f,jobNumber:'',notes:''}));setJobSearch('');setJobValid(false);setEditingEntryId(null);await refresh();
+  }catch(e){setMessage(e instanceof Error?e.message:'Could not save timesheet')}
  }
+
+ async function beginEdit(entry:Entry){
+  if(!['Submitted','Rejected'].includes(entry.status))return;
+  setEditingEntryId(entry.id);
+  setForm({date:entry.date,type:entry.type,jobNumber:entry.jobNumber,start:entry.start,finish:entry.finish,breakMinutes:entry.breakMinutes,notes:entry.notes||''});
+  if(entry.type==='Work'){
+   setJobSearch(`Job ${entry.jobNumber}`);
+   setJobValid(true);
+   try{
+    const data=await api<{job:{id:number;name:string;site:string;customer:string}}>(`/api/simpro-job/${encodeURIComponent(entry.jobNumber)}`);
+    setJobSearch(`${data.job.id} — ${data.job.name||data.job.site||'Simpro job'}`);
+   }catch{}
+  }else{
+   setJobSearch('');setJobValid(false);
+  }
+  window.scrollTo({top:0,behavior:'smooth'});
+ }
+
+ function cancelEdit(){
+  setEditingEntryId(null);
+  setForm({date:new Date().toISOString().slice(0,10),type:'Work',jobNumber:'',start:'07:00',finish:'15:30',breakMinutes:30,notes:''});
+  setJobSearch('');setJobValid(false);
+ }
+
+ async function deleteEntry(entry:Entry){
+  if(!window.confirm(`Delete this ${entry.date} timesheet?`))return;
+  setMessage('');
+  try{
+   await api(`/api/timesheets/${entry.id}`,{method:'DELETE'});
+   if(editingEntryId===entry.id)cancelEdit();
+   setMessage('Timesheet deleted.');
+   await refresh();
+  }catch(e){setMessage(e instanceof Error?e.message:'Could not delete timesheet')}
+ }
+
  async function action(id:string,actionName:'pm-approve'|'admin-approve'|'reject'){
   let reason='';if(actionName==='reject')reason=window.prompt('Reason for rejection?')||'Rejected';
   try{await api(`/api/timesheets/${id}`,{method:'PATCH',body:JSON.stringify({action:actionName,reason})});await refresh()}
   catch(e){setMessage(e instanceof Error?e.message:'Could not update timesheet')}
+ }
+ async function recheckSimpro(id:string){
+  setMessage('');
+  try{
+   const data=await api<{entry:Entry}>(`/api/timesheets/${id}/simpro-preview`,{method:'POST'});
+   setMessage(data.entry.simproPreview?.ready?'Simpro Safe Mode check passed. Nothing was written.':data.entry.simproPreview?.message||'Simpro Safe Mode check completed.');
+   await refresh();
+  }catch(e){setMessage(e instanceof Error?e.message:'Could not re-check Simpro')}
  }
  async function bulkFinalApprove(){
   if(user?.role!=='admin')return;
@@ -209,7 +258,7 @@ export default function App(){
 
    {user.role==='pm'&&<section className="card priority-card">
     <div className="section-head"><div><span className="eyebrow">PM APPROVALS</span><h2>{queue.length?`${queue.length} waiting for you`:"You're up to date"}</h2></div><button className="ghost" onClick={refresh}>Refresh</button></div>
-    {queue.length===0?<p className="muted">Nothing waiting for approval.</p>:<div className="entry-list">{queue.map(e=><EntryCard key={e.id} entry={e} user={user} action={action}/>)}</div>}
+    {queue.length===0?<p className="muted">Nothing waiting for approval.</p>:<div className="entry-list">{queue.map(e=><EntryCard key={e.id} entry={e} user={user} action={action} recheckSimpro={recheckSimpro} onEdit={beginEdit} onDelete={deleteEntry}/>)}</div>}
    </section>}
 
    {user.role==='admin'&&<section className="admin-dashboard">
@@ -241,17 +290,18 @@ export default function App(){
 
     <section className="card priority-card embedded-queue">
      <div className="section-head"><div><span className="eyebrow">OFFICE APPROVALS</span><h2>{queue.length?`${queue.length} waiting for final approval`:'No final approvals waiting'}</h2></div></div>
-     {queue.length===0?<p className="muted">PM-approved entries will appear here.</p>:<div className="entry-list">{queue.map(e=><EntryCard key={e.id} entry={e} user={user} action={action}/>)}</div>}
+     {queue.length===0?<p className="muted">PM-approved entries will appear here.</p>:<div className="entry-list">{queue.map(e=><EntryCard key={e.id} entry={e} user={user} action={action} recheckSimpro={recheckSimpro} onEdit={beginEdit} onDelete={deleteEntry}/>)}</div>}
     </section>
    </section>}
 
-   <section className="card quick-entry hero-entry">
-    <div className="today-strip"><div><span className="eyebrow">TODAY</span><h2>{today}</h2><p className="entry-subtitle">Your day, ready in seconds.</p></div><div className="hours-orb"><span>Today</span><strong>{total.toFixed(2)}</strong><small>hours</small></div></div>
+   <section className={`card quick-entry hero-entry ${editingEntryId?'editing-mode':''}`}>
+    <div className="today-strip"><div><span className="eyebrow">{editingEntryId?'EDIT TIMESHEET':'TODAY'}</span><h2>{editingEntryId?'Correct your entry':today}</h2><p className="entry-subtitle">{editingEntryId?'Saving will resubmit it for PM approval.':'Your day, ready in seconds.'}</p></div><div className="hours-orb"><span>{editingEntryId?'Updated':'Today'}</span><strong>{total.toFixed(2)}</strong><small>hours</small></div></div>
+    {editingEntryId&&<div className="edit-banner"><span>You are editing a submitted/rejected timesheet.</span><button type="button" className="ghost" onClick={cancelEdit}>Cancel edit</button></div>}
     <form onSubmit={submit} className="simple-form">
      <div className="type-pills">{workTypes.map(t=><button key={t} type="button" className={form.type===t?'active':''} onClick={()=>{setForm({...form,type:t,breakMinutes:t==='Work'?30:0,jobNumber:t==='Work'?form.jobNumber:''});if(t!=='Work'){setJobSearch('');setJobValid(false);setJobMenuOpen(false)}}}>{t}</button>)}</div>
 
      {form.type==='Work'&&<>
-      {recentJobs.length>0&&<div className="recent-jobs"><span>Recent jobs</span><div>{recentJobs.map(id=><button key={id} type="button" onClick={()=>chooseRecent(id)}>Job {id}</button>)}</div></div>}
+      {recentJobs.length>0&&<div className="recent-jobs mobile-optional"><span>Recent jobs</span><div>{recentJobs.map(id=><button key={id} type="button" onClick={()=>chooseRecent(id)}>Job {id}</button>)}</div></div>}
       <label>Job<div className="job-picker"><input value={jobSearch} onFocus={()=>{setJobMenuOpen(true);loadJobs()}} onChange={e=>{setJobSearch(e.target.value);setForm({...form,jobNumber:''});setJobValid(false);setJobMenuOpen(true);loadJobs()}} placeholder={jobsLoading?'Loading Simpro jobs…':'Search job name or number'} autoComplete="off"/>
        {jobMenuOpen&&<div className="job-menu">{jobsLoading?<div className="job-empty">Loading jobs…</div>:filteredJobs.length===0?<div className="job-empty">No matching Simpro jobs.</div>:filteredJobs.map(j=><button key={j.id} type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>chooseJob(j)}><strong>{j.name||j.site||`Job ${j.id}`}</strong><span>#{j.id}{j.site?` • ${j.site}`:''}{j.customer?` • ${j.customer}`:''}</span></button>)}</div>}
       </div>{jobValid&&<span className="job-ok">✓ Simpro job selected</span>}</label>
@@ -262,14 +312,14 @@ export default function App(){
       <label>Finish<input type="time" value={form.finish} onChange={e=>setForm({...form,finish:e.target.value})}/></label>
       <label>Break<input type="number" min="0" max="240" value={form.breakMinutes} onChange={e=>setForm({...form,breakMinutes:Number(e.target.value)})}/><span className="field-hint">minutes</span></label>
      </div>
-     <label>Notes <span className="optional">(optional)</span><input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Only if needed"/></label>
-     <button className="primary submit-day" type="submit"><span>Submit day</span><strong>{total.toFixed(2)} hrs</strong></button>
+     <details className="notes-details" open={!!form.notes}><summary>+ Add note <span>(optional)</span></summary><label>Notes<input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Only if needed"/></label></details>
+     <button className="primary submit-day" type="submit"><span>{editingEntryId?'Save & resubmit':'Submit day'}</span><strong>{total.toFixed(2)} hrs</strong></button>
     </form>
    </section>
 
    <section className="card">
     <div className="section-head"><div><span className="eyebrow">MY TIMESHEETS</span><h2>Recent days</h2></div><button className="ghost" onClick={refresh}>Refresh</button></div>
-    {myEntries.length===0?<p className="muted">No timesheets yet.</p>:<div className="entry-list">{myEntries.slice(0,8).map(e=><EntryCard key={e.id} entry={e} user={user} action={action}/>)}</div>}
+    {myEntries.length===0?<p className="muted">No timesheets yet.</p>:<div className="entry-list">{myEntries.slice(0,8).map(e=><EntryCard key={e.id} entry={e} user={user} action={action} recheckSimpro={recheckSimpro} onEdit={beginEdit} onDelete={deleteEntry}/>)}</div>}
    </section>
 
    {user.role==='admin'&&<details className="card admin-tools">
@@ -290,6 +340,6 @@ function PasswordInput({shown,onToggle,...props}:{shown:boolean;onToggle:()=>voi
  return <div style={{position:'relative',width:'100%'}}><input {...props} type={shown?'text':'password'} style={{...(props.style||{}),paddingRight:'48px',width:'100%'}}/><button type="button" onClick={onToggle} aria-label={shown?'Hide password':'Show password'} title={shown?'Hide password':'Show password'} style={{position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',border:0,background:'transparent',padding:'8px',cursor:'pointer',fontSize:'20px',lineHeight:1,color:'inherit'}}>{shown?'🙈':'👁️'}</button></div>
 }
 
-function EntryCard({entry,user,action}:{entry:Entry;user:User;action:(id:string,a:'pm-approve'|'admin-approve'|'reject')=>void}){
- return <div className="entry"><div><div className="entry-title"><strong>{entry.employee}</strong><span className={`badge status-${statusClass(entry.status)}`}>{entry.status}</span></div><div className="entry-meta"><span>{entry.date}</span><span>{entry.type}</span><span>{entry.start}–{entry.finish}</span><span>{entry.totalHours.toFixed(2)} hrs</span></div>{entry.jobNumber&&<div className="job">Job #{entry.jobNumber}</div>}{entry.notes&&<p>{entry.notes}</p>}{entry.status==='Admin Approved'&&<p className="simpro">Simpro: {entry.simproStatus||'Awaiting API connection'}</p>}{entry.rejectionReason&&<p className="rejected">Rejected: {entry.rejectionReason}</p>}</div><div className="actions">{user.role==='pm'&&entry.status==='Submitted'&&entry.employeeId!==user.employeeId&&<><button className="primary" onClick={()=>action(entry.id,'pm-approve')}>Approve</button><button className="danger" onClick={()=>action(entry.id,'reject')}>Reject</button></>}{user.role==='admin'&&entry.status==='PM Approved'&&<><button className="primary" onClick={()=>action(entry.id,'admin-approve')}>Final approve</button><button className="danger" onClick={()=>action(entry.id,'reject')}>Reject</button></>}</div></div>
+function EntryCard({entry,user,action,recheckSimpro,onEdit,onDelete}:{entry:Entry;user:User;action:(id:string,a:'pm-approve'|'admin-approve'|'reject')=>void;recheckSimpro?:(id:string)=>void;onEdit?:(entry:Entry)=>void;onDelete?:(entry:Entry)=>void}){
+ return <div className="entry"><div><div className="entry-title"><strong>{entry.employee}</strong><span className={`badge status-${statusClass(entry.status)}`}>{entry.status}</span></div><div className="entry-meta"><span>{entry.date}</span><span>{entry.type}</span><span>{entry.start}–{entry.finish}</span><span>{entry.totalHours.toFixed(2)} hrs</span></div>{entry.jobNumber&&<div className="job">Job #{entry.jobNumber}</div>}{entry.notes&&<p>{entry.notes}</p>}{entry.status==='Admin Approved'&&<div className={`simpro-safe ${entry.simproPreview?.ready?'ready':'blocked'}`}><div className="simpro-safe-head"><strong>{entry.simproPreview?.ready?'Simpro Safe Mode ✓':'Simpro Safe Mode'}</strong><span>{entry.simproStatus||'Not checked'}</span></div>{entry.simproPreview?<><p>{entry.simproPreview.message}</p><div className="simpro-preview-grid"><span><small>Employee</small>{entry.simproPreview.employeeName} #{entry.simproPreview.employeeId}</span><span><small>Job</small>{entry.simproPreview.jobName||`#${entry.simproPreview.jobId}`}</span><span><small>Date</small>{entry.simproPreview.date}</span><span><small>Time</small>{entry.simproPreview.start}–{entry.simproPreview.finish} • {entry.simproPreview.totalHours.toFixed(2)}h</span></div>{entry.simproPreview.duplicate&&<strong className="duplicate-warning">Possible duplicate detected</strong>}{user.role==='admin'&&recheckSimpro&&<button type="button" className="ghost simpro-recheck" onClick={()=>recheckSimpro(entry.id)}>Re-check Simpro</button>}</>:<p>Final approval completed. Run the Safe Mode check before enabling live posting.</p>}</div>}{entry.rejectionReason&&<p className="rejected">Rejected: {entry.rejectionReason}</p>}</div><div className="actions">{entry.employeeId===user.employeeId&&['Submitted','Rejected'].includes(entry.status)&&<><button className="ghost" onClick={()=>onEdit?.(entry)}>Edit</button><button className="danger" onClick={()=>onDelete?.(entry)}>Delete</button></>}{user.role==='pm'&&entry.status==='Submitted'&&entry.employeeId!==user.employeeId&&<><button className="primary" onClick={()=>action(entry.id,'pm-approve')}>Approve</button><button className="danger" onClick={()=>action(entry.id,'reject')}>Reject</button></>}{user.role==='admin'&&entry.status==='PM Approved'&&<><button className="primary" onClick={()=>action(entry.id,'admin-approve')}>Final approve</button><button className="danger" onClick={()=>action(entry.id,'reject')}>Reject</button></>}</div></div>
 }
