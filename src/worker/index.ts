@@ -83,48 +83,58 @@ export class TimesheetStore{
  }
 }
 const app=new Hono<{Bindings:Bindings}>();
-app.get('/api/simpro-test', async c => {
-  const apiKey = c.env.SIMPRO_API_KEY;
+app.get('/api/simpro-job/:jobId',async c=>{
+ const apiKey=c.env.SIMPRO_API_KEY;
+ const jobId=c.req.param('jobId').trim();
 
-  if (!apiKey) {
-    return c.json({ ok: false, error: 'SIMPRO_API_KEY is not configured' }, 500);
-  }
+ if(!apiKey){
+  return c.json({ok:false,error:'SIMPRO_API_KEY is not configured'},500);
+ }
 
-  const response = await fetch(
-    'https://elliotcontrols.simprosuite.com/api/v1.0/companies/0/jobs/2926',
-    {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: 'application/json'
-      }
+ if(!/^\d+$/.test(jobId)){
+  return c.json({ok:false,error:'Invalid Simpro job number'},400);
+ }
+
+ try{
+  const response=await fetch(
+   `https://elliotcontrols.simprosuite.com/api/v1.0/companies/0/jobs/${jobId}`,
+   {
+    method:'GET',
+    headers:{
+     Authorization:`Bearer ${apiKey}`,
+     Accept:'application/json'
     }
+   }
   );
 
-  const text = await response.text();
-
-  if (!response.ok) {
-    return c.json({
-      ok: false,
-      status: response.status,
-      error: text
-    }, 502);
+  if(response.status===404){
+   return c.json({ok:false,exists:false,error:'Simpro job not found'},404);
   }
 
-  let companies;
-  try {
-    companies = JSON.parse(text);
-  } catch {
-    return c.json({
-      ok: false,
-      error: 'Simpro returned an unexpected response'
-    }, 502);
+  if(!response.ok){
+   return c.json({
+    ok:false,
+    error:'Unable to check Simpro job',
+    status:response.status
+   },502);
   }
 
- return c.json({
-  ok: true,
-  employees: companies
-});
+  const job:any=await response.json();
+
+  return c.json({
+   ok:true,
+   exists:true,
+   job:{
+    id:job.ID,
+    type:job.Type,
+    name:job.Name||'',
+    site:job.Site?.Name||'',
+    customer:job.Customer?.CompanyName||job.Customer?.Name||''
+   }
+  });
+ }catch{
+  return c.json({ok:false,error:'Unable to contact Simpro'},502);
+ }
 });
 
 app.get('/api/health', c => c.json({ok:true, app:'Elliot Controls Timesheets'}));
