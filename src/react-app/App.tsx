@@ -199,7 +199,7 @@ export default function App(){
    </section>}
 
    {user.role==='pm'&&<section className="card priority-card">
-    <div className="section-head"><div><span className="eyebrow">PM APPROVALS</span><h2>{queue.length?`${queue.length} waiting for you`:'You're up to date'}</h2></div><button className="ghost" onClick={refresh}>Refresh</button></div>
+    <div className="section-head"><div><span className="eyebrow">PM APPROVALS</span><h2>{queue.length?`${queue.length} waiting for you`:"You're up to date"}</h2></div><button className="ghost" onClick={refresh}>Refresh</button></div>
     {queue.length===0?<p className="muted">Nothing waiting for approval.</p>:<div className="entry-list">{queue.map(e=><EntryCard key={e.id} entry={e} user={user} action={action}/>)}</div>}
    </section>}
 
