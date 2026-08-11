@@ -91,7 +91,7 @@ app.get('/api/simpro-test', async c => {
   }
 
   const response = await fetch(
-    'https://elliotcontrols.simprosuite.com/api/v1.0/companies/',
+    'https://elliotcontrols.simprosuite.com/api/v1.0/companies/0/employees/',
     {
       method: 'GET',
       headers: {
@@ -122,8 +122,9 @@ app.get('/api/simpro-test', async c => {
   }
 
   return c.json({
-    ok: true,
-    companies
+  ok: true,
+  employees: companies
+});
   });
 });
 app.get('/api/health',c=>c.json({ok:true,app:'Elliot Controls Timesheets'}));
