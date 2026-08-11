@@ -5,7 +5,7 @@ type Role='staff'|'pm'|'admin';
 type WorkType='Work'|'Annual Leave'|'Sick Leave'|'RDO'|'Public Holiday'|'Training'|'Other Paid Leave';
 type Status='Submitted'|'PM Approved'|'Admin Approved'|'Rejected';
 type User={employeeId:string;name:string;email:string;role:Role;position:string;mustChangePassword:boolean};
-type StaffRow={employeeId:string;name:string;email:string;position:string;role:Role;active:boolean;mustChangePassword:boolean};
+type StaffRow={employeeId:string;name:string;email:string;position:string;role:Role;active:boolean;mustChangePassword:boolean;workDays:number[]};
 type JobOption={id:number;name:string;site:string;customer:string};
 type Entry={id:string;employeeId:string;employee:string;date:string;type:WorkType;jobNumber:string;start:string;finish:string;breakMinutes:number;totalHours:number;notes:string;status:Status;pmApprovedBy?:string;adminApprovedBy?:string;rejectionReason?:string;createdAt:string;simproStatus?:string};
 
@@ -108,6 +108,7 @@ export default function App(){
   }catch(e){setMessage(e instanceof Error?e.message:'Could not update staff account')}
  }
  async function setRole(employeeId:string,role:Role){try{await api(`/api/admin/staff/${employeeId}/role`,{method:'PATCH',body:JSON.stringify({role})});await loadStaff()}catch(e){setMessage(e instanceof Error?e.message:'Could not update role')}}
+ async function setWorkPattern(employeeId:string,days:number[]){try{await api(`/api/admin/staff/${employeeId}/work-pattern`,{method:'PATCH',body:JSON.stringify({days})});setStaff(rows=>rows.map(s=>s.employeeId===employeeId?{...s,workDays:days}:s))}catch(e){setMessage(e instanceof Error?e.message:'Could not update expected workdays')}}
 
  if(loading)return <div className="center-screen"><div className="loader-card"><strong>ELLIOT CONTROLS</strong><p>Loading timesheets…</p></div></div>;
  if(!user)return <div className="auth-shell"><div className="auth-card"><div className="brand-kicker">ELLIOT CONTROLS</div><h1>Timesheets</h1><p className="muted">Staff sign in</p>{message&&<div className="message">{message}</div>}
@@ -127,21 +128,28 @@ export default function App(){
  const today=now.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'});
  const submitted=entries.filter(e=>e.status==='Submitted').length,pmApproved=entries.filter(e=>e.status==='PM Approved').length,approved=entries.filter(e=>e.status==='Admin Approved').length,rejected=entries.filter(e=>e.status==='Rejected').length;
 
- const monday=new Date(now);const day=(now.getDay()+6)%7;monday.setDate(now.getDate()-day);monday.setHours(0,0,0,0);
- const weekDays=Array.from({length:5},(_,i)=>{const d=new Date(monday);d.setDate(monday.getDate()+i);return d});
+ const weekStartDate=new Date(now);
+ const daysSinceWednesday=(now.getDay()-3+7)%7;
+ weekStartDate.setDate(now.getDate()-daysSinceWednesday);weekStartDate.setHours(0,0,0,0);
+ const weekDays=Array.from({length:7},(_,i)=>{const d=new Date(weekStartDate);d.setDate(weekStartDate.getDate()+i);return d});
  const isoLocal=(d:Date)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
- const weekdayLabels=['Mon','Tue','Wed','Thu','Fri'];
+ const weekdayLabels=['Wed','Thu','Fri','Sat','Sun','Mon','Tue'];
  const activeStaff=staff.filter(s=>s.active);
- const weekEntries=entries.filter(e=>{const d=new Date(`${e.date}T00:00:00`);return d>=weekDays[0]&&d<=new Date(weekDays[4].getTime()+86399999)});
+ const weekEntries=entries.filter(e=>{const d=new Date(`${e.date}T00:00:00`);return d>=weekDays[0]&&d<=new Date(weekDays[6].getTime()+86399999)});
  const rank:Record<Status,number>={'Rejected':4,'Submitted':1,'PM Approved':2,'Admin Approved':3};
+ const jsDayForIndex=[3,4,5,6,0,1,2];
  const staffRows=activeStaff.map(s=>{
   const personEntries=weekEntries.filter(e=>e.employeeId===s.employeeId);
-  const cells=weekDays.map(d=>{
+  const expected=new Set(s.workDays||[3,4,5,1,2]);
+  const cells=weekDays.map((d,i)=>{
    const date=isoLocal(d),rows=personEntries.filter(e=>e.date===date);
    if(rows.length===0){
     const future=d>now;
     const isToday=date===isoLocal(now);
-    return{date,label:future?'future':isToday?'today-missing':'missing',text:future?'—':isToday?'Due today':'Missing'};
+    const expectedToday=expected.has(jsDayForIndex[i]);
+    if(future)return{date,label:'future',text:'—'};
+    if(!expectedToday)return{date,label:'off',text:'—'};
+    return{date,label:isToday?'today-missing':'missing',text:isToday?'Due today':'Missing'};
    }
    const worst=rows.slice().sort((a,b)=>rank[b.status]-rank[a.status])[0];
    const total=rows.reduce((sum,e)=>sum+e.totalHours,0);
@@ -152,8 +160,9 @@ export default function App(){
   const hasMissingPast=cells.some(c=>c.label==='missing');
   const hasSubmitted=personEntries.some(e=>e.status==='Submitted');
   const hasPmApproved=personEntries.some(e=>e.status==='PM Approved');
-  const pastWeekdays=weekDays.filter(d=>d<new Date(now.getFullYear(),now.getMonth(),now.getDate())).length;
-  const coveredPast=cells.slice(0,pastWeekdays).every(c=>!['missing','rejected'].includes(c.label));
+  const startToday=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const expectedPastIndexes=weekDays.map((d,i)=>({d,i})).filter(x=>x.d<startToday&&expected.has(jsDayForIndex[x.i])).map(x=>x.i);
+  const coveredPast=expectedPastIndexes.every(i=>!['missing','rejected'].includes(cells[i].label));
   let dashboardStatus:'missing'|'attention'|'ready'|'complete'='ready';
   let statusText='Ready';
   if(hasRejected){dashboardStatus='attention';statusText='Needs attention'}
@@ -172,7 +181,7 @@ export default function App(){
  const completeCount=staffRows.filter(r=>r.status==='complete').length;
  const missingCount=staffRows.filter(r=>r.status==='missing').length;
  const attentionCount=staffRows.filter(r=>r.status==='attention').length;
- const weekEnd=weekDays[4].toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+ const weekEnd=weekDays[6].toLocaleDateString('en-AU',{day:'numeric',month:'short'});
  const weekStart=weekDays[0].toLocaleDateString('en-AU',{day:'numeric',month:'short'});
 
  function chooseJob(j:JobOption){setForm({...form,jobNumber:String(j.id)});setJobSearch(`${j.id} — ${j.name||j.site||'Simpro job'}`);setJobValid(true);setJobMenuOpen(false)}
@@ -222,7 +231,7 @@ export default function App(){
 
     <div className="week-table-wrap"><table className="week-table">
      <thead><tr><th>Employee</th>{weekdayLabels.map((d,i)=><th key={d}><span>{d}</span><small>{weekDays[i].getDate()}</small></th>)}<th>Hours</th><th>Status</th></tr></thead>
-     <tbody>{dashboardRows.length===0?<tr><td colSpan={8} className="empty-table">No staff match this view.</td></tr>:dashboardRows.map(r=><tr key={r.staff.employeeId}>
+     <tbody>{dashboardRows.length===0?<tr><td colSpan={10} className="empty-table">No staff match this view.</td></tr>:dashboardRows.map(r=><tr key={r.staff.employeeId}>
       <td><strong>{r.staff.name}</strong><span>{r.staff.position||'Staff'}</span></td>
       {r.cells.map(c=><td key={c.date}><span className={`day-chip ${c.label}`}>{c.text}</span></td>)}
       <td className="hours-cell"><strong>{r.total.toFixed(1)}</strong></td>
@@ -268,7 +277,7 @@ export default function App(){
     <div className="admin-body"><div className="section-head"><div><span className="eyebrow">STAFF</span><h2>Manage accounts</h2></div><button className="ghost" onClick={loadStaff}>Refresh</button></div>
     <input className="staff-search" value={staffSearch} onChange={e=>setStaffSearch(e.target.value)} placeholder="Search staff"/>
     {temporary&&<div className="temporary"><strong>Temporary password for {temporary.name}</strong><code>{temporary.password}</code><span>Copy this now. It is only shown after activation/reset.</span></div>}
-    <div className="staff-list">{filteredStaff.map(s=><div className="staff-row" key={s.employeeId}><div className="staff-person"><strong>{s.name}</strong><span>{s.position||'No position'} • Simpro #{s.employeeId}</span></div><div className="staff-controls"><select value={s.role} onChange={e=>setRole(s.employeeId,e.target.value as Role)}><option value="staff">Staff</option><option value="pm">Project Manager</option><option value="admin">Office Admin</option></select><span className={`account-status ${s.active?'active':'inactive'}`}>{s.active?(s.mustChangePassword?'Temp password issued':'Active'):'Not activated'}</span>{s.active?<><button className="ghost" onClick={()=>staffAction(s.employeeId,'reset-password')}>Reset</button><button className="danger" onClick={()=>staffAction(s.employeeId,'deactivate')}>Deactivate</button></>:<button className="primary" onClick={()=>staffAction(s.employeeId,'activate')}>Activate</button>}</div></div>)}</div>
+    <div className="staff-list">{filteredStaff.map(s=><div className="staff-row" key={s.employeeId}><div className="staff-person"><strong>{s.name}</strong><span>{s.position||'No position'} • Simpro #{s.employeeId}</span><div className="workday-pills">{[['Wed',3],['Thu',4],['Fri',5],['Sat',6],['Sun',0],['Mon',1],['Tue',2]].map(([label,day])=>{const n=Number(day),days=s.workDays||[3,4,5,1,2],on=days.includes(n);return <button key={String(label)} type="button" className={on?'active':''} onClick={()=>{const next=on?days.filter(d=>d!==n):[...days,n].sort((a,b)=>a-b);setWorkPattern(s.employeeId,next)}}>{label}</button>})}</div></div><div className="staff-controls"><select value={s.role} onChange={e=>setRole(s.employeeId,e.target.value as Role)}><option value="staff">Staff</option><option value="pm">Project Manager</option><option value="admin">Office Admin</option></select><span className={`account-status ${s.active?'active':'inactive'}`}>{s.active?(s.mustChangePassword?'Temp password issued':'Active'):'Not activated'}</span>{s.active?<><button className="ghost" onClick={()=>staffAction(s.employeeId,'reset-password')}>Reset</button><button className="danger" onClick={()=>staffAction(s.employeeId,'deactivate')}>Deactivate</button></>:<button className="primary" onClick={()=>staffAction(s.employeeId,'activate')}>Activate</button>}</div></div>)}</div>
     </div>
    </details>}
   </main>

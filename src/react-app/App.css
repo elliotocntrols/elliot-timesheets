@@ -453,3 +453,30 @@ input:focus,select:focus{
   .summary-card span{font-size:10px}
   .dashboard-heading h2{font-size:23px}
 }
+
+
+
+/* Wednesday–Tuesday payroll week + employee expected-workday settings */
+.week-table{min-width:1080px}
+.day-chip.off{background:#f5f7f8;color:#a1aab1}
+.workday-pills{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px}
+.workday-pills button{
+  border:1px solid #dce4e9;
+  background:#f6f8fa;
+  color:#6d7b86;
+  border-radius:8px;
+  padding:5px 7px;
+  font-size:10px;
+  font-weight:800;
+  cursor:pointer;
+}
+.workday-pills button.active{
+  background:#142431;
+  color:#fff;
+  border-color:#142431;
+  box-shadow:0 4px 10px rgba(20,36,49,.12);
+}
+@media(max-width:760px){
+  .workday-pills{width:100%}
+  .workday-pills button{flex:1;min-width:38px}
+}
