@@ -91,7 +91,7 @@ app.get('/api/simpro-test', async c => {
   }
 
   const response = await fetch(
-    'https://elliotcontrols.simprosuite.com/api/v1.0/companies/0/employees/',
+    'https://elliotcontrols.simprosuite.com/api/v1.0/companies/0/jobs/2926',
     {
       method: 'GET',
       headers: {
