@@ -121,12 +121,12 @@ app.get('/api/simpro-test', async c => {
     }, 502);
   }
 
-  return c.json({
+ return c.json({
   ok: true,
   employees: companies
 });
-  });
 });
-app.get('/api/health',c=>c.json({ok:true,app:'Elliot Controls Timesheets'}));
+
+app.get('/api/health', c => c.json({ok:true, app:'Elliot Controls Timesheets'}));
 app.all('/api/*',async c=>{const id=c.env.TIMESHEET_STORE.idFromName('elliot-controls-timesheets');const stub=c.env.TIMESHEET_STORE.get(id);const url=new URL(c.req.raw.url);url.pathname=url.pathname.replace(/^\/api/,'')||'/';const headers=new Headers(c.req.raw.headers);const forwarded=new Request(url.toString(),{method:c.req.raw.method,headers,body:['GET','HEAD'].includes(c.req.raw.method)?undefined:c.req.raw.body});return stub.fetch(forwarded)});
 export default app;
