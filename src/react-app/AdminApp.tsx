@@ -59,9 +59,7 @@ export default function AdminApp(){
     sheet.getCell(row,7).value='Admin Approved';
    });
 
-   workbook.calcProperties.fullCalcOnLoad=true;
-   workbook.calcProperties.forceFullCalc=true;
-   workbook.calcProperties.calcMode='auto';
+  workbook.calcProperties.fullCalcOnLoad = true;
 
    const output=await workbook.xlsx.writeBuffer();
    const blob=new Blob([output],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
