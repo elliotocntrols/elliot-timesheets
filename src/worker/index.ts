@@ -196,8 +196,10 @@ export class TimesheetStore{
   if(request.method==='PATCH'&&path.startsWith('/timesheets/')){
    const id=path.split('/').pop()||'',entry=await this.state.storage.get<Entry>(`entry:${id}`);if(!entry)return this.json({error:'Timesheet not found'},404);const b=await request.json<Record<string,unknown>>();const action=String(b.action||''),reason=String(b.reason||'').trim();
    if(action==='edit'){
-    if(entry.employeeId!==user.id)return this.json({error:'You can only edit your own timesheet'},403);
-    if(!['Submitted','Rejected'].includes(entry.status))return this.json({error:'This timesheet is locked because it has already been approved'},409);
+    const adminEdit=user.role==='admin';
+    if(!adminEdit&&entry.employeeId!==user.id)return this.json({error:'You can only edit your own timesheet'},403);
+    if(!adminEdit&&!['Submitted','Rejected'].includes(entry.status))return this.json({error:'This timesheet is locked because it has already been approved'},409);
+    const wasApproved=entry.status==='Admin Approved';
     const type=String(b.type||entry.type),jobNumber=String(b.jobNumber||'').trim(),totalHours=Number(b.totalHours||0);
     if(type==='Work'&&!jobNumber)return this.json({error:'Job number is required for worked time'},400);
     if(!Number.isFinite(totalHours)||totalHours<=0||totalHours>24)return this.json({error:'Invalid total hours'},400);
@@ -206,15 +208,22 @@ export class TimesheetStore{
     entry.jobNumber=type==='Work'?jobNumber:'';
     entry.start=String(b.start||entry.start);
     entry.finish=String(b.finish||entry.finish);
-    entry.breakMinutes=Number(b.breakMinutes||0);
+    entry.breakMinutes=0;
     entry.totalHours=totalHours;
     entry.notes=String(b.notes||'');
-    entry.status='Submitted';
-    delete entry.pmApprovedBy;
-    delete entry.adminApprovedBy;
     delete entry.rejectionReason;
     delete entry.simproPreview;
-    entry.simproStatus='Awaiting approval';
+    if(adminEdit&&wasApproved){
+     entry.status='Admin Approved';
+     entry.adminApprovedBy=user.name;
+     entry.simproPreview=await this.buildSimproPreview(entry);
+     entry.simproStatus=entry.simproPreview.ready?'SAFE MODE: Ready to send':'SAFE MODE: Blocked';
+    }else{
+     entry.status='Submitted';
+     delete entry.pmApprovedBy;
+     delete entry.adminApprovedBy;
+     entry.simproStatus='Awaiting approval';
+    }
    }
    else if(action==='pm-approve'){if(user.role!=='pm')return this.json({error:'Project Manager permission required'},403);if(entry.employeeId===user.id)return this.json({error:'You cannot approve your own timesheet'},403);if(entry.status!=='Submitted'&&entry.status!=='PM Approved')return this.json({error:'Only pending entries can be approved'},409);entry.status='Admin Approved';entry.pmApprovedBy=user.name;entry.simproPreview=await this.buildSimproPreview(entry);entry.simproStatus=entry.simproPreview.ready?'SAFE MODE: Ready to send':'SAFE MODE: Blocked'}
    else if(action==='admin-approve'){if(user.role!=='admin')return this.json({error:'Office Admin permission required'},403);if(entry.status!=='Submitted'&&entry.status!=='PM Approved')return this.json({error:'Only pending entries can be approved'},409);entry.status='Admin Approved';entry.adminApprovedBy=user.name;entry.simproPreview=await this.buildSimproPreview(entry);entry.simproStatus=entry.simproPreview.ready?'SAFE MODE: Ready to send':'SAFE MODE: Blocked'}

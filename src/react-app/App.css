@@ -34,3 +34,20 @@
 /* Person-level weekly approvals */
 .person-approval{border-top:1px solid #e8edf1;padding:14px 0}.person-approval:first-of-type{border-top:0}.person-approval-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.person-approval-head>div:first-child{display:flex;flex-direction:column;gap:2px}.person-approval-head span{font-size:11px;color:#71808b}.person-approval-head>div:last-child{display:flex;gap:7px;flex-wrap:wrap}.approval-days{margin-top:9px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px}.approval-days>div{background:#f6f8fa;border:1px solid #e2e8ec;border-radius:9px;padding:8px;display:flex;flex-direction:column;gap:2px}.approval-days b{font-size:11px}.approval-days span{font-size:10px;color:#71808b}.approval-title p{margin:3px 0 0}
 @media(max-width:700px){.person-approval-head{align-items:flex-start;flex-direction:column}.person-approval-head>div:last-child{width:100%}.person-approval-head>div:last-child button{flex:1}.approval-days{grid-template-columns:1fr 1fr}}
+
+/* Office Admin: grouped weekly view with per-day control */
+.daily-admin-days{grid-template-columns:1fr}
+.admin-day-card{display:flex!important;flex-direction:row!important;justify-content:space-between;align-items:center;gap:12px;background:#f7f9fa!important}
+.admin-day-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.admin-day-main span{font-size:11px!important}.admin-day-main small{width:max-content}
+.admin-day-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.admin-day-actions button{border:1px solid #d8e0e5;background:#fff;border-radius:8px;padding:7px 9px;font-size:11px;font-weight:750}
+.admin-day-actions .primary{border:0;background:linear-gradient(135deg,#ffb100,#ff8f00)}
+.day-status{display:inline-block;border-radius:999px;padding:4px 7px;font-size:9px!important;font-weight:850;background:#eef1f3;color:#65727c}
+.day-status.admin-approved{background:#e6f6ed;color:#167343}.day-status.submitted{background:#fff5d8;color:#866100}.day-status.pm-approved{background:#eaf2ff;color:#315d9b}.day-status.rejected{background:#fff0f0;color:#a22b2b}
+.admin-edit-backdrop{position:fixed;inset:0;z-index:100;background:rgba(5,17,25,.58);display:grid;place-items:center;padding:18px}
+.admin-edit-modal{width:min(620px,100%);background:#fff;border-radius:18px;padding:18px;box-shadow:0 25px 70px rgba(0,0,0,.25)}
+.admin-edit-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}.admin-edit-head span{font-size:9px;font-weight:900;letter-spacing:.14em;color:#71808b}.admin-edit-head h2{margin:2px 0}.admin-edit-head>button{border:0;background:#eef2f4;border-radius:9px;width:34px;height:34px;font-size:20px}
+.admin-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.admin-edit-grid label{display:grid;gap:4px;font-size:11px;font-weight:800}.admin-edit-grid input,.admin-edit-grid select{min-height:42px;border:1px solid #d7e0e6;border-radius:9px;padding:8px;background:#fff}.admin-edit-grid .wide{grid-column:1/-1}
+.admin-edit-footer{display:flex;justify-content:space-between;align-items:center;margin-top:14px}.admin-edit-footer>span{font-size:20px;font-weight:900}.admin-edit-footer>div{display:flex;gap:7px}.admin-edit-footer button{border:1px solid #d7e0e6;background:#fff;border-radius:9px;padding:9px 12px}.admin-edit-footer .primary{border:0;background:linear-gradient(135deg,#ffb100,#ff8f00)}
+@media(max-width:700px){.admin-day-card{align-items:flex-start;flex-direction:column!important}.admin-day-actions{width:100%}.admin-day-actions button{flex:1}.admin-edit-grid{grid-template-columns:1fr}.admin-edit-grid .wide{grid-column:auto}}
