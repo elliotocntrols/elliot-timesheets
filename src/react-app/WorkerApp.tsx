@@ -1,4 +1,4 @@
-import {FormEvent,InputHTMLAttributes,useEffect,useMemo,useState} from 'react';
+import {FormEvent,useEffect,useMemo,useState} from 'react';
 import {api,Entry,hoursBetween,JobOption,setManifest,User,workTypes,WorkType} from './appShared';
 
 export default function WorkerApp(){
