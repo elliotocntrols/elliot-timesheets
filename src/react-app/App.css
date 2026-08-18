@@ -27,3 +27,5 @@
 .compact-submit b{font-size:12px}
 @media(max-width:430px){.worker-week-days{gap:3px}.worker-week-days button{padding:5px 1px;border-radius:8px}.worker-week-days button span{font-size:8px}.worker-week-days button b{font-size:13px}}
 .compact-submit:disabled{opacity:.65;cursor:wait}
+
+.pm-approval-list{margin-top:10px}.approval-title{display:flex;align-items:center;justify-content:space-between;gap:10px}.approval-title h2{margin:2px 0 8px}.approval-title>button{border:1px solid #dde5ea;background:#f7f9fa;border-radius:9px;padding:7px 10px}.approval-worker-row>div:last-child{display:flex;gap:6px;align-items:center}.approval-worker-row .primary{padding:8px 10px}.muted{color:#71808b}
