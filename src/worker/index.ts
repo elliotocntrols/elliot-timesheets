@@ -4,9 +4,25 @@ type Role='staff'|'pm'|'admin';
 type Employee={id:string;name:string;email:string;position:string;role:Role};
 type Account={employeeId:string;salt:string;passwordHash:string;createdAt:string;active:boolean;mustChangePassword:boolean};
 type Session={employeeId:string;expiresAt:string};
-type Entry={id:string;employeeId:string;employee:string;date:string;type:string;jobNumber:string;start:string;finish:string;breakMinutes:number;totalHours:number;notes:string;status:'Submitted'|'PM Approved'|'Admin Approved'|'Rejected';pmApprovedBy?:string;adminApprovedBy?:string;rejectionReason?:string;createdAt:string;simproStatus?:string};
-type Bindings=Env&{TIMESHEET_STORE:DurableObjectNamespace;ADMIN_SETUP_CODE?:string;BOOTSTRAP_ADMIN_CODE?:string};
+type Entry={id:string;employeeId:string;employee:string;date:string;type:string;jobNumber:string;start:string;finish:string;breakMinutes:number;totalHours:number;notes:string;status:'Submitted'|'PM Approved'|'Admin Approved'|'Rejected';pmApprovedBy?:string;adminApprovedBy?:string;rejectionReason?:string;createdAt:string;simproStatus?:string;simproPreview?:SimproPreview};
+type Bindings=Env&{TIMESHEET_STORE:DurableObjectNamespace;ADMIN_SETUP_CODE?:string;BOOTSTRAP_ADMIN_CODE?:string;SIMPRO_API_KEY?:string};
 type PublicUser={employeeId:string;name:string;email:string;role:Role;position:string;mustChangePassword:boolean};
+type WorkPattern={days:number[]};
+type SimproPreview={
+ mode:'safe';
+ checkedAt:string;
+ employeeId:string;
+ employeeName:string;
+ jobId:string;
+ jobName:string;
+ date:string;
+ start:string;
+ finish:string;
+ totalHours:number;
+ duplicate:boolean;
+ ready:boolean;
+ message:string;
+};
 const EMPLOYEES:Employee[]=[{"id":"441","name":"Aiden Elliot","email":"rollarboy@outlook.com","position":"1st Year Apprentice","role":"staff"},{"id":"469","name":"Akbari Abdulwasi","email":"Akbariabdulwasi@gmail.com","position":"A Grade Electrician","role":"staff"},{"id":"293","name":"Alexander Morgan","email":"xander.e.morgan@gmail.com","position":"3rd year apprentice","role":"staff"},{"id":"410","name":"Angus Trivett","email":"angus.trivett18@gmail.com.au","position":"1st Year Apprentice","role":"staff"},{"id":"462","name":"Anthony John Morse","email":"morsey93@gmail.com","position":"A Grade Electrician","role":"staff"},{"id":"287","name":"Bac Lac Nhan Huynh","email":"nhan.huynh@elliotcontrols.com.au","position":"Engineer","role":"staff"},{"id":"76","name":"Bradley Barker","email":"bradleybarker@live.com","position":"A Grade Electrician","role":"staff"},{"id":"468","name":"Brayden Cox","email":"coxy131810@gmail.com","position":"A Grade","role":"staff"},{"id":"33","name":"Brenton Buettner","email":"yamaha_mx55@hotmail.com","position":"A Grade Electrician","role":"staff"},{"id":"189","name":"Bryce Bayer","email":"bryce.bayerelec@gmail.com","position":"A Grade Electrician","role":"staff"},{"id":"292","name":"Cameron Dyt","email":"camdyt09@gmail.com","position":"A Grade","role":"staff"},{"id":"481","name":"Christopher Tainton","email":"chrisjtainton@gmail.com","position":"1st Year Apprentice","role":"staff"},{"id":"26","name":"Damien Greco","email":"damien.greco@elliotcontrols.com.au","position":"Project Manager","role":"pm"},{"id":"24","name":"David Lay","email":"DJLAY100686@bigpond.com","position":"A Grade Electrician","role":"staff"},{"id":"473","name":"David Twiss","email":"david.twiss@hotmail.com","position":"A Grade","role":"staff"},{"id":"297","name":"Donato Ciocca","email":"donnyciocca@yahoo.com","position":"A Grade Electrician","role":"staff"},{"id":"456","name":"Duc Anh Nguyen","email":"duc@elliotcontrols.com.au","position":"BMS engineer","role":"staff"},{"id":"435","name":"Dylan Aridas","email":"dylanaridas7@gmail.com","position":"A Grade","role":"staff"},{"id":"122","name":"Grigorios Theodoropoulos","email":"greg-theo@bigpond.com","position":"A Grade Electrician","role":"staff"},{"id":"43","name":"Jack Miller","email":"jackmiller135@gmail.com","position":"Apprentice Electrician","role":"staff"},{"id":"446","name":"Jacob Wifffen","email":"jacobswiffen4@gmail.com","position":"3rd year Apprentice","role":"staff"},{"id":"470","name":"Jake Kakouros","email":"jakeykak@gmail.com","position":"A Grade","role":"staff"},{"id":"459","name":"James McGrath","email":"jamesmcgrath132@gmail.com","position":"A Grade","role":"staff"},{"id":"474","name":"James Winton","email":"jmackenzie.winton@gmail.com","position":"A Grade","role":"staff"},{"id":"434","name":"Jamie Keller","email":"jkellerexc@gmail.com","position":"1st Year Apprentice","role":"staff"},{"id":"475","name":"Jhon Rivero Suarez","email":"jhonrisu@gmail.com","position":"A Grade","role":"staff"},{"id":"443","name":"Jintao Sun","email":"jackjintaos@gmail.com","position":"Graduate Engineer","role":"staff"},{"id":"476","name":"Jonathon Banitsiotis","email":"MontAlbertElec@mail.com","position":"A Grade","role":"staff"},{"id":"471","name":"Jonathon Edward Banitsiotis","email":"jon_bit@mail.com","position":"A Grade","role":"staff"},{"id":"359","name":"Joshua Morton","email":"jishymorton123@gmail.com","position":"2nd Year Apprentice","role":"staff"},{"id":"135","name":"Joshua Turner","email":"josh.turner96@hotmail.com","position":"A Grade Electrician","role":"staff"},{"id":"117","name":"Justin Rooney","email":"justin@jdrelectrical.com.au","position":"A Grade Electrician","role":"staff"},{"id":"452","name":"Kasianov Sergei","email":"skasianov1989@icloud.com","position":"Electrician fitter","role":"staff"},{"id":"110","name":"Kirk Fraser","email":"kirk_fraser87@hotmail.com","position":"A Grade Electrician","role":"staff"},{"id":"425","name":"Kishore Umapathi","email":"kishore@elliotcontrols.com.au","position":"Graduate Engineer","role":"staff"},{"id":"465","name":"Klajdi Qyteza","email":"qytezaklajdi@gmail.com","position":"1st Year Apprentice","role":"staff"},{"id":"32","name":"Lee Walsh","email":"lee.walsh@elliotcontrols.com.au","position":"Project Manager","role":"pm"},{"id":"408","name":"Liam Carfi","email":"liam.carfi@gmail.com","position":"1st Year Apprentice","role":"staff"},{"id":"453","name":"Liqin Zhang","email":"liqinzhangbob@gmail.com","position":"Engineer","role":"staff"},{"id":"74","name":"Luke Butler","email":"luke.vic@hotmail.com","position":"A Grade Electrician","role":"staff"},{"id":"461","name":"Luke OTWINOWSKI","email":"Luke.otwinowski@gmail.com","position":"A Grade","role":"staff"},{"id":"17","name":"marissa Elliot","email":"matmaris@live.com.au","position":"office","role":"admin"},{"id":"11","name":"Mat Elliot","email":"mat@elliotcontrols.com.au","position":"Director","role":"staff"},{"id":"478","name":"Michael Fox","email":"michael.foxy48@gmail.com","position":"A Grade","role":"staff"},{"id":"27","name":"Michael Joel Scannell","email":"scannell@hotmail.com.au","position":"A Grade Electrician","role":"staff"},{"id":"242","name":"Michael Thompson","email":"michael.thompson@elliotcontrols.com.au","position":"Estimator","role":"staff"},{"id":"300","name":"Mitchell McGuire","email":"mcguirem_7@hotmail.com","position":"A Grade Electrician","role":"staff"},{"id":"479","name":"Nicholas Addamo","email":"nickadd06@outloom.com","position":"3rd year Apprentice","role":"staff"},{"id":"455","name":"Nick Hogan","email":"nick.hogan@elliotcontrols.com.au","position":"Project Manager","role":"pm"},{"id":"19","name":"Nicolas Hogan","email":"hogs_12@hotmail.com","position":"A Grade Electrician","role":"staff"},{"id":"472","name":"Nijazi Demiroski","email":"Niyazi.demiroski@hotmail.com","position":"2nd Year Apprentice","role":"staff"},{"id":"208","name":"Omar Sultani","email":"omar.sultani@elliotcontrols.com.au","position":"Service Technician","role":"staff"},{"id":"418","name":"Owen Terrill","email":"owendterrill@icloud.com","position":"1st Year Apprentice","role":"staff"},{"id":"442","name":"Paddy Power","email":"paddyjpower9@gmail.com","position":"1st Year Apprentice","role":"staff"},{"id":"445","name":"Pamela Huang","email":"pamela305945239@gmail.com","position":"Engineer","role":"staff"},{"id":"460","name":"Paul Allemand","email":"pallemand1984@gmail.com","position":"A Grade","role":"staff"},{"id":"115","name":"Paul Malan","email":"paul_malan13@hotmail.com","position":"A Grade Electrician","role":"staff"},{"id":"477","name":"Pegley Joseph","email":"pegley_69@hotmail.com","position":"A Grade","role":"staff"},{"id":"16","name":"Phillip McIntosh","email":"phil@elliotcontrols.com.au","position":"Project Manager","role":"pm"},{"id":"458","name":"Praveen Bhat Prakash","email":"bhatpraveen1996@gmail.com","position":"BMS engineer","role":"staff"},{"id":"438","name":"Rodney Op","email":"rodney.op@hotmail.com","position":"A Grade Electrician","role":"staff"},{"id":"467","name":"Ryan Galea","email":"ryan.galea97@gmail.com","position":"A Grade Electrician","role":"staff"},{"id":"13","name":"Sandra Miller","email":"admin@elliotcontrols.com.au","position":"Admin","role":"admin"},{"id":"306","name":"Scott Wills","email":"scott.wills@hotmail.co.uk","position":"A Grade Electrician","role":"staff"},{"id":"291","name":"Sebastian Bartolo","email":"sebatian.keith.bartolo@gmail.com","position":"3rd year Apprentice","role":"staff"},{"id":"112","name":"Steve Hocking","email":"stevehocking86@gmail.com","position":"A Grade Electrician","role":"staff"},{"id":"136","name":"steve Kemp","email":"steventhomaskemp@gmail.com","position":"A Grade Electrician","role":"staff"},{"id":"444","name":"Steven Jarvis","email":"steviejj66@outlook.com","position":"A Grade","role":"staff"},{"id":"440","name":"Tim Rowsthorn","email":"trowsthorn@hotmail.com","position":"MSSB design","role":"staff"},{"id":"91","name":"Tom Miller","email":"tom1234miller@outlook.com","position":"A Grade Electrician","role":"staff"},{"id":"426","name":"Travis McGuire","email":"tpmcguire7@gmail.com","position":"A Grade Electrician","role":"staff"},{"id":"480","name":"Travis Upton","email":"trav.upton@yahoo.com.au","position":"","role":"staff"},{"id":"451","name":"Yang Shi","email":"admin@elliotcontrols.com.au","position":"office","role":"admin"}];
 const enc=new TextEncoder();
 function bytesToHex(bytes:ArrayBuffer){return Array.from(new Uint8Array(bytes)).map(b=>b.toString(16).padStart(2,'0')).join('')}
@@ -26,6 +42,49 @@ export class TimesheetStore{
  private sessionCookie(token:string,maxAge=60*60*24*14){return `ec_session=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`}
  private async setPassword(employeeId:string,password:string,mustChangePassword:boolean){const salt=randomHex(16),passwordHash=await hashPassword(password,salt);const existing=await this.state.storage.get<Account>(`account:${employeeId}`);const account:Account={employeeId,salt,passwordHash,createdAt:existing?.createdAt||new Date().toISOString(),active:true,mustChangePassword};await this.state.storage.put(`account:${employeeId}`,account);return account}
  
+ private async buildSimproPreview(entry:Entry):Promise<SimproPreview>{
+  const apiKey=this.env.SIMPRO_API_KEY;
+  const base='https://elliotcontrols.simprosuite.com/api/v1.0/companies/0';
+  const checkedAt=new Date().toISOString();
+  if(!apiKey)return{mode:'safe',checkedAt,employeeId:entry.employeeId,employeeName:entry.employee,jobId:entry.jobNumber,jobName:'',date:entry.date,start:entry.start,finish:entry.finish,totalHours:entry.totalHours,duplicate:false,ready:false,message:'SIMPRO_API_KEY is not configured.'};
+  if(entry.type!=='Work')return{mode:'safe',checkedAt,employeeId:entry.employeeId,employeeName:entry.employee,jobId:entry.jobNumber,jobName:entry.type,date:entry.date,start:entry.start,finish:entry.finish,totalHours:entry.totalHours,duplicate:false,ready:false,message:`${entry.type} is not being sent to Simpro in Safe Mode yet.`};
+  if(!/^\d+$/.test(entry.employeeId)||!/^\d+$/.test(entry.jobNumber))return{mode:'safe',checkedAt,employeeId:entry.employeeId,employeeName:entry.employee,jobId:entry.jobNumber,jobName:'',date:entry.date,start:entry.start,finish:entry.finish,totalHours:entry.totalHours,duplicate:false,ready:false,message:'Employee ID or job ID is invalid.'};
+
+  const headers={Authorization:`Bearer ${apiKey}`,Accept:'application/json'};
+  try{
+   const [employeeRes,jobRes,timesheetRes]=await Promise.all([
+    fetch(`${base}/employees/${entry.employeeId}`,{headers}),
+    fetch(`${base}/jobs/${entry.jobNumber}`,{headers}),
+    fetch(`${base}/employees/${entry.employeeId}/timesheets/?StartDate=${encodeURIComponent(entry.date)}&EndDate=${encodeURIComponent(entry.date)}&Includes=Job&ScheduleType=Schedule`,{headers})
+   ]);
+
+   if(!employeeRes.ok)return{mode:'safe',checkedAt,employeeId:entry.employeeId,employeeName:entry.employee,jobId:entry.jobNumber,jobName:'',date:entry.date,start:entry.start,finish:entry.finish,totalHours:entry.totalHours,duplicate:false,ready:false,message:`Simpro employee ${entry.employeeId} could not be verified (${employeeRes.status}).`};
+   if(!jobRes.ok)return{mode:'safe',checkedAt,employeeId:entry.employeeId,employeeName:entry.employee,jobId:entry.jobNumber,jobName:'',date:entry.date,start:entry.start,finish:entry.finish,totalHours:entry.totalHours,duplicate:false,ready:false,message:`Simpro job ${entry.jobNumber} could not be verified (${jobRes.status}).`};
+
+   const employee:any=await employeeRes.json();
+   const job:any=await jobRes.json();
+   let duplicate=false;
+
+   if(timesheetRes.ok){
+    const existing:any[]=await timesheetRes.json();
+    duplicate=existing.some(row=>{
+     const reference=String(row.Reference||'');
+     const sameJob=reference===entry.jobNumber||reference.startsWith(`${entry.jobNumber}-`);
+     const sameTime=String(row.StartTime||'').slice(0,5)===entry.start&&String(row.EndTime||'').slice(0,5)===entry.finish;
+     const sameHours=Math.abs(Number(row.TotalHrs||0)-entry.totalHours)<0.02;
+     return sameJob&&(sameTime||sameHours);
+    });
+   }
+
+   const jobName=String(job.Name||job.Site?.Name||`Job ${entry.jobNumber}`);
+   if(duplicate)return{mode:'safe',checkedAt,employeeId:entry.employeeId,employeeName:String(employee.Name||entry.employee),jobId:entry.jobNumber,jobName,date:entry.date,start:entry.start,finish:entry.finish,totalHours:entry.totalHours,duplicate:true,ready:false,message:'Possible duplicate already exists in Simpro for this employee, job and date.'};
+
+   return{mode:'safe',checkedAt,employeeId:entry.employeeId,employeeName:String(employee.Name||entry.employee),jobId:entry.jobNumber,jobName,date:entry.date,start:entry.start,finish:entry.finish,totalHours:entry.totalHours,duplicate:false,ready:true,message:'Verified against Simpro. Safe Mode only — nothing has been written.'};
+  }catch{
+   return{mode:'safe',checkedAt,employeeId:entry.employeeId,employeeName:entry.employee,jobId:entry.jobNumber,jobName:'',date:entry.date,start:entry.start,finish:entry.finish,totalHours:entry.totalHours,duplicate:false,ready:false,message:'Could not contact Simpro while building the Safe Mode preview.'};
+  }
+ }
+
  async fetch(request:Request){
   const url=new URL(request.url),path=url.pathname;
   if(request.method==='POST'&&path==='/auth/bootstrap-admin'){
@@ -57,7 +116,7 @@ export class TimesheetStore{
   if(auth.account.mustChangePassword&&!path.startsWith('/auth/'))return this.json({error:'You must change your temporary password first.'},428);
 
   if(request.method==='GET'&&path==='/admin/staff'){
-   if(user.role!=='admin')return this.json({error:'Office Admin permission required'},403);const result=[];for(const base of EMPLOYEES){const employee=await this.effectiveEmployee(base.id);if(!employee)continue;const account=await this.state.storage.get<Account>(`account:${base.id}`);result.push({employeeId:base.id,name:base.name,email:base.email,position:base.position,role:employee.role,active:!!account?.active,mustChangePassword:!!account?.mustChangePassword})}return this.json({staff:result});
+   if(user.role!=='admin')return this.json({error:'Office Admin permission required'},403);const result=[];for(const base of EMPLOYEES){const employee=await this.effectiveEmployee(base.id);if(!employee)continue;const account=await this.state.storage.get<Account>(`account:${base.id}`);const pattern=await this.state.storage.get<WorkPattern>(`pattern:${base.id}`)||{days:[3,4,5,1,2]};result.push({employeeId:base.id,name:base.name,email:base.email,position:base.position,role:employee.role,active:!!account?.active,mustChangePassword:!!account?.mustChangePassword,workDays:pattern.days})}return this.json({staff:result});
   }
   const staffMatch=path.match(/^\/admin\/staff\/([^/]+)\/(activate|reset-password|deactivate)$/);
   if(request.method==='POST'&&staffMatch){if(user.role!=='admin')return this.json({error:'Office Admin permission required'},403);const employeeId=staffMatch[1],action=staffMatch[2],employee=await this.effectiveEmployee(employeeId);if(!employee)return this.json({error:'Employee not found'},404);if(employee.id===user.id&&action==='deactivate')return this.json({error:'You cannot deactivate your own Office Admin account.'},409);
@@ -67,22 +126,187 @@ export class TimesheetStore{
   const roleMatch=path.match(/^\/admin\/staff\/([^/]+)\/role$/);
   if(request.method==='PATCH'&&roleMatch){if(user.role!=='admin')return this.json({error:'Office Admin permission required'},403);const employeeId=roleMatch[1],base=baseEmployeeById(employeeId);if(!base)return this.json({error:'Employee not found'},404);const b=await request.json<Record<string,unknown>>();const role=String(b.role||'') as Role;if(!['staff','pm','admin'].includes(role))return this.json({error:'Invalid role'},400);if(employeeId===user.id&&role!=='admin')return this.json({error:'You cannot remove your own Office Admin permission.'},409);await this.state.storage.put(`role:${employeeId}`,role);return this.json({ok:true});}
 
+  const patternMatch=path.match(/^\/admin\/staff\/([^/]+)\/work-pattern$/);
+  if(request.method==='PATCH'&&patternMatch){
+   if(user.role!=='admin')return this.json({error:'Office Admin permission required'},403);
+   const employeeId=patternMatch[1],base=baseEmployeeById(employeeId);
+   if(!base)return this.json({error:'Employee not found'},404);
+   const b=await request.json<Record<string,unknown>>();
+   const raw=Array.isArray(b.days)?b.days:[];
+   const days=[...new Set(raw.map(Number).filter(n=>Number.isInteger(n)&&n>=0&&n<=6))].sort((a,b)=>a-b);
+   await this.state.storage.put(`pattern:${employeeId}`,{days} satisfies WorkPattern);
+   return this.json({ok:true,workDays:days});
+  }
+
   if(request.method==='GET'&&path==='/timesheets'){
    const rows=await this.state.storage.list<Entry>({prefix:'entry:'});let entries=[...rows.values()].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));if(user.role==='staff')entries=entries.filter(e=>e.employeeId===user.id);else if(user.role==='pm')entries=entries.filter(e=>e.employeeId===user.id||e.status==='Submitted'||e.status==='PM Approved');return this.json({entries});
   }
   if(request.method==='POST'&&path==='/timesheets'){
    const b=await request.json<Record<string,unknown>>();const type=String(b.type||''),jobNumber=String(b.jobNumber||'').trim();if(type==='Work'&&!jobNumber)return this.json({error:'Job number is required for worked time'},400);const totalHours=Number(b.totalHours||0);if(!Number.isFinite(totalHours)||totalHours<=0||totalHours>24)return this.json({error:'Invalid total hours'},400);const id=crypto.randomUUID();const entry:Entry={id,employeeId:user.id,employee:user.name,date:String(b.date||''),type,jobNumber,start:String(b.start||''),finish:String(b.finish||''),breakMinutes:Number(b.breakMinutes||0),totalHours,notes:String(b.notes||''),status:'Submitted',createdAt:new Date().toISOString(),simproStatus:'Awaiting API connection'};await this.state.storage.put(`entry:${id}`,entry);return this.json({entry},201);
   }
+  const previewMatch=path.match(/^\/timesheets\/([^/]+)\/simpro-preview$/);
+  if(request.method==='POST'&&previewMatch){
+   if(user.role!=='admin')return this.json({error:'Office Admin permission required'},403);
+   const entry=await this.state.storage.get<Entry>(`entry:${previewMatch[1]}`);
+   if(!entry)return this.json({error:'Timesheet not found'},404);
+   if(entry.status!=='Admin Approved')return this.json({error:'Final approval is required first'},409);
+   entry.simproPreview=await this.buildSimproPreview(entry);
+   entry.simproStatus=entry.simproPreview.ready?'SAFE MODE: Ready to send':'SAFE MODE: Blocked';
+   await this.state.storage.put(`entry:${entry.id}`,entry);
+   return this.json({entry,preview:entry.simproPreview});
+  }
+
+  if(request.method==='PATCH'&&path==='/timesheets/week-approval'){
+   if(user.role==='staff')return this.json({error:'Approval permission required'},403);
+   const b=await request.json<Record<string,unknown>>();
+   const employeeId=String(b.employeeId||''),startDate=String(b.startDate||''),endDate=String(b.endDate||''),action=String(b.action||''),reason=String(b.reason||'').trim();
+   if(!employeeId||!/^\d{4}-\d{2}-\d{2}$/.test(startDate)||!/^\d{4}-\d{2}-\d{2}$/.test(endDate))return this.json({error:'Employee and week dates are required'},400);
+   if(user.role==='pm'&&employeeId===user.id)return this.json({error:'You cannot approve your own timesheet week'},403);
+   if(!['approve','reject'].includes(action))return this.json({error:'Unknown week approval action'},400);
+   const rows=await this.state.storage.list<Entry>({prefix:'entry:'});
+   const targets=[...rows.values()].filter(e=>e.employeeId===employeeId&&e.date>=startDate&&e.date<=endDate&&['Submitted','PM Approved'].includes(e.status));
+   if(!targets.length)return this.json({error:'No pending timesheets found for this employee in the selected week'},409);
+   for(const entry of targets){
+    if(action==='approve'){
+     entry.status='Admin Approved';
+     if(user.role==='pm')entry.pmApprovedBy=user.name;else entry.adminApprovedBy=user.name;
+     delete entry.rejectionReason;
+     entry.simproPreview=await this.buildSimproPreview(entry);
+     entry.simproStatus=entry.simproPreview.ready?'SAFE MODE: Ready to send':'SAFE MODE: Blocked';
+    }else{
+     entry.status='Rejected';
+     entry.rejectionReason=reason||'Rejected';
+     delete entry.simproPreview;
+     entry.simproStatus='Awaiting correction';
+    }
+    await this.state.storage.put(`entry:${entry.id}`,entry);
+   }
+   return this.json({ok:true,count:targets.length,entries:targets});
+  }
+
+  if(request.method==='DELETE'&&path.startsWith('/timesheets/')){
+   const id=path.split('/').pop()||'',entry=await this.state.storage.get<Entry>(`entry:${id}`);
+   if(!entry)return this.json({error:'Timesheet not found'},404);
+   if(entry.employeeId!==user.id)return this.json({error:'You can only delete your own timesheet'},403);
+   if(!['Submitted','Rejected'].includes(entry.status))return this.json({error:'This timesheet is locked because it has already been approved'},409);
+   await this.state.storage.delete(`entry:${id}`);
+   return this.json({ok:true});
+  }
+
   if(request.method==='PATCH'&&path.startsWith('/timesheets/')){
    const id=path.split('/').pop()||'',entry=await this.state.storage.get<Entry>(`entry:${id}`);if(!entry)return this.json({error:'Timesheet not found'},404);const b=await request.json<Record<string,unknown>>();const action=String(b.action||''),reason=String(b.reason||'').trim();
-   if(action==='pm-approve'){if(user.role!=='pm')return this.json({error:'Project Manager permission required'},403);if(entry.employeeId===user.id)return this.json({error:'You cannot approve your own timesheet'},403);if(entry.status!=='Submitted')return this.json({error:'Only submitted entries can be approved'},409);entry.status='Admin Approved';entry.pmApprovedBy=user.name;entry.simproStatus='Awaiting API connection'}
-   else if(action==='admin-approve'){if(user.role!=='admin')return this.json({error:'Office Admin permission required'},403);if(entry.status!=='Submitted'&&entry.status!=='PM Approved')return this.json({error:'Only submitted entries can be approved'},409);entry.status='Admin Approved';entry.adminApprovedBy=user.name;entry.simproStatus='Awaiting API connection'}
-   else if(action==='reject'){if(user.role==='staff')return this.json({error:'Approval permission required'},403);if(entry.status!=='Submitted'&&entry.status!=='PM Approved')return this.json({error:'Only pending entries can be rejected'},409);entry.status='Rejected';entry.rejectionReason=reason||'Rejected'}else return this.json({error:'Unknown action'},400);await this.state.storage.put(`entry:${id}`,entry);return this.json({entry});
+   if(action==='edit'){
+    if(entry.employeeId!==user.id)return this.json({error:'You can only edit your own timesheet'},403);
+    if(!['Submitted','Rejected'].includes(entry.status))return this.json({error:'This timesheet is locked because it has already been approved'},409);
+    const type=String(b.type||entry.type),jobNumber=String(b.jobNumber||'').trim(),totalHours=Number(b.totalHours||0);
+    if(type==='Work'&&!jobNumber)return this.json({error:'Job number is required for worked time'},400);
+    if(!Number.isFinite(totalHours)||totalHours<=0||totalHours>24)return this.json({error:'Invalid total hours'},400);
+    entry.date=String(b.date||entry.date);
+    entry.type=type;
+    entry.jobNumber=type==='Work'?jobNumber:'';
+    entry.start=String(b.start||entry.start);
+    entry.finish=String(b.finish||entry.finish);
+    entry.breakMinutes=Number(b.breakMinutes||0);
+    entry.totalHours=totalHours;
+    entry.notes=String(b.notes||'');
+    entry.status='Submitted';
+    delete entry.pmApprovedBy;
+    delete entry.adminApprovedBy;
+    delete entry.rejectionReason;
+    delete entry.simproPreview;
+    entry.simproStatus='Awaiting approval';
+   }
+   else if(action==='pm-approve'){if(user.role!=='pm')return this.json({error:'Project Manager permission required'},403);if(entry.employeeId===user.id)return this.json({error:'You cannot approve your own timesheet'},403);if(entry.status!=='Submitted'&&entry.status!=='PM Approved')return this.json({error:'Only pending entries can be approved'},409);entry.status='Admin Approved';entry.pmApprovedBy=user.name;entry.simproPreview=await this.buildSimproPreview(entry);entry.simproStatus=entry.simproPreview.ready?'SAFE MODE: Ready to send':'SAFE MODE: Blocked'}
+   else if(action==='admin-approve'){if(user.role!=='admin')return this.json({error:'Office Admin permission required'},403);if(entry.status!=='Submitted'&&entry.status!=='PM Approved')return this.json({error:'Only pending entries can be approved'},409);entry.status='Admin Approved';entry.adminApprovedBy=user.name;entry.simproPreview=await this.buildSimproPreview(entry);entry.simproStatus=entry.simproPreview.ready?'SAFE MODE: Ready to send':'SAFE MODE: Blocked'}
+   else if(action==='reject'){if(user.role==='staff')return this.json({error:'Approval permission required'},403);if(entry.status!=='Submitted'&&entry.status!=='PM Approved')return this.json({error:'Only pending entries can be rejected'},409);entry.status='Rejected';entry.rejectionReason=reason||'Rejected';delete entry.simproPreview;entry.simproStatus='Awaiting correction'}else return this.json({error:'Unknown action'},400);await this.state.storage.put(`entry:${id}`,entry);return this.json({entry});
   }
   return this.json({error:'Not found'},404)
  }
 }
 const app=new Hono<{Bindings:Bindings}>();
-app.get('/api/health',c=>c.json({ok:true,app:'Elliot Controls Timesheets'}));
+app.get('/api/simpro-jobs',async c=>{
+ const apiKey=c.env.SIMPRO_API_KEY;
+ if(!apiKey)return c.json({ok:false,error:'SIMPRO_API_KEY is not configured'},500);
+
+ const cache=caches.default;
+ const cacheKey=new Request('https://elliot-timesheets.internal/simpro-jobs');
+ const cached=await cache.match(cacheKey);
+ if(cached)return new Response(cached.body,cached);
+
+ try{
+  const base='https://elliotcontrols.simprosuite.com/api/v1.0/companies/0/jobs/';
+  const makeUrl=(page:number)=>{
+   const u=new URL(base);
+   u.searchParams.set('pageSize','250');
+   u.searchParams.set('page',String(page));
+   u.searchParams.set('orderby','-ID');
+   u.searchParams.set('columns','ID,Name,Site,Customer,CompletedDate,ArchiveReason');
+   return u.toString();
+  };
+  const headers={Authorization:`Bearer ${apiKey}`,Accept:'application/json'};
+  const first=await fetch(makeUrl(1),{headers});
+  if(!first.ok)return c.json({ok:false,error:'Unable to load Simpro jobs',status:first.status},502);
+
+  const firstRows:any[]=await first.json();
+  const resultPages=Math.max(1,Number(first.headers.get('Result-Pages')||'1'));
+  const maxPages=Math.min(resultPages,20);
+  const rows:any[]=[...firstRows];
+
+  for(let start=2;start<=maxPages;start+=4){
+   const pages:number[]=[];
+   for(let p=start;p<start+4&&p<=maxPages;p++)pages.push(p);
+   const responses=await Promise.all(pages.map(p=>fetch(makeUrl(p),{headers})));
+   for(const response of responses){
+    if(!response.ok)continue;
+    const pageRows:any[]=await response.json();
+    rows.push(...pageRows);
+   }
+  }
+
+  const jobs=rows
+   .filter(j=>!j.CompletedDate&&!j.ArchiveReason)
+   .map(j=>({
+    id:Number(j.ID),
+    name:String(j.Name||''),
+    site:String(j.Site?.Name||''),
+    customer:String(j.Customer?.CompanyName||j.Customer?.Name||'')
+   }))
+   .filter(j=>Number.isFinite(j.id))
+   .sort((a,b)=>b.id-a.id);
+
+  const body=JSON.stringify({ok:true,jobs,truncated:resultPages>maxPages});
+  const response=new Response(body,{
+   headers:{
+    'content-type':'application/json; charset=utf-8',
+    'cache-control':'public, max-age=300'
+   }
+  });
+  c.executionCtx.waitUntil(cache.put(cacheKey,response.clone()));
+  return response;
+ }catch{
+  return c.json({ok:false,error:'Unable to contact Simpro'},502);
+ }
+});
+
+app.get('/api/simpro-job/:jobId',async c=>{
+ const apiKey=c.env.SIMPRO_API_KEY;
+ const jobId=c.req.param('jobId').trim();
+ if(!apiKey)return c.json({ok:false,error:'SIMPRO_API_KEY is not configured'},500);
+ if(!/^\d+$/.test(jobId))return c.json({ok:false,error:'Invalid Simpro job number'},400);
+ try{
+  const response=await fetch(`https://elliotcontrols.simprosuite.com/api/v1.0/companies/0/jobs/${jobId}`,{
+   method:'GET',
+   headers:{Authorization:`Bearer ${apiKey}`,Accept:'application/json'}
+  });
+  if(response.status===404)return c.json({ok:false,exists:false,error:'Simpro job not found'},404);
+  if(!response.ok)return c.json({ok:false,error:'Unable to check Simpro job',status:response.status},502);
+  const job:any=await response.json();
+  return c.json({ok:true,exists:true,job:{id:job.ID,type:job.Type,name:job.Name||'',site:job.Site?.Name||'',customer:job.Customer?.CompanyName||job.Customer?.Name||''}});
+ }catch{
+  return c.json({ok:false,error:'Unable to contact Simpro'},502);
+ }
+});
+
+app.get('/api/health', c => c.json({ok:true, app:'Elliot Controls Timesheets'}));
 app.all('/api/*',async c=>{const id=c.env.TIMESHEET_STORE.idFromName('elliot-controls-timesheets');const stub=c.env.TIMESHEET_STORE.get(id);const url=new URL(c.req.raw.url);url.pathname=url.pathname.replace(/^\/api/,'')||'/';const headers=new Headers(c.req.raw.headers);const forwarded=new Request(url.toString(),{method:c.req.raw.method,headers,body:['GET','HEAD'].includes(c.req.raw.method)?undefined:c.req.raw.body});return stub.fetch(forwarded)});
 export default app;

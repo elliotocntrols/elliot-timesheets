@@ -29,3 +29,8 @@
 .compact-submit:disabled{opacity:.65;cursor:wait}
 
 .pm-approval-list{margin-top:10px}.approval-title{display:flex;align-items:center;justify-content:space-between;gap:10px}.approval-title h2{margin:2px 0 8px}.approval-title>button{border:1px solid #dde5ea;background:#f7f9fa;border-radius:9px;padding:7px 10px}.approval-worker-row>div:last-child{display:flex;gap:6px;align-items:center}.approval-worker-row .primary{padding:8px 10px}.muted{color:#71808b}
+
+
+/* Person-level weekly approvals */
+.person-approval{border-top:1px solid #e8edf1;padding:14px 0}.person-approval:first-of-type{border-top:0}.person-approval-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.person-approval-head>div:first-child{display:flex;flex-direction:column;gap:2px}.person-approval-head span{font-size:11px;color:#71808b}.person-approval-head>div:last-child{display:flex;gap:7px;flex-wrap:wrap}.approval-days{margin-top:9px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px}.approval-days>div{background:#f6f8fa;border:1px solid #e2e8ec;border-radius:9px;padding:8px;display:flex;flex-direction:column;gap:2px}.approval-days b{font-size:11px}.approval-days span{font-size:10px;color:#71808b}.approval-title p{margin:3px 0 0}
+@media(max-width:700px){.person-approval-head{align-items:flex-start;flex-direction:column}.person-approval-head>div:last-child{width:100%}.person-approval-head>div:last-child button{flex:1}.approval-days{grid-template-columns:1fr 1fr}}
