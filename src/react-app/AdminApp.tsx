@@ -1,4 +1,5 @@
 import {useEffect,useMemo,useState} from 'react';
+import ExcelJS from 'exceljs';
 import {api,Entry,setManifest,StaffRow,User} from './appShared';
 
 type Tab='dashboard'|'payroll'|'staff'|'integrations';
@@ -18,13 +19,71 @@ export default function AdminApp(){
  const payroll=active.map(s=>{const es=approved.filter(e=>e.employeeId===s.employeeId);const sum=(t:string)=>es.filter(e=>e.type===t).reduce((a,e)=>a+e.totalHours,0);return{s,work:sum('Work'),rdo:sum('RDO'),sick:sum('Sick Leave'),annual:sum('Annual Leave'),ph:sum('Public Holiday'),training:sum('Training'),total:es.reduce((a,e)=>a+e.totalHours,0)}}).filter(r=>!search||`${r.s.name} ${r.s.position}`.toLowerCase().includes(search.toLowerCase()));
  function exportCsv(){const rows=[['Employee ID','Employee','Work','RDO','Sick','Annual Leave','Public Holiday','Training','Total'],...payroll.map(r=>[r.s.employeeId,r.s.name,r.work,r.rdo,r.sick,r.annual,r.ph,r.training,r.total])];const csv=rows.map(x=>x.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');const u=URL.createObjectURL(new Blob([csv],{type:'text/csv'})),a=document.createElement('a');a.href=u;a.download=`Elliot-Payroll-${week.iso(week.days[0])}.csv`;a.click();URL.revokeObjectURL(u)}
 
+ async function generateWages(){
+  setMessage('');
+  const blockers=week.entries.filter(e=>e.status!=='Admin Approved');
+  if(blockers.length&&!confirm(`${blockers.length} timesheet entr${blockers.length===1?'y is':'ies are'} not final approved. Generate the wage workbook using approved entries only?`))return;
+  try{
+   const response=await fetch('/wage-template.xlsx',{cache:'no-store'});
+   if(!response.ok)throw new Error('Wage template could not be loaded. Check public/wage-template.xlsx.');
+   const template=await response.arrayBuffer();
+   const workbook=new ExcelJS.Workbook();
+   await workbook.xlsx.load(template);
+   const sheet=workbook.getWorksheet('App Import');
+   if(!sheet)throw new Error('The wage template is missing the App Import sheet.');
+
+   const start=week.days[0];
+   sheet.getCell('B2').value=new Date(start.getFullYear(),start.getMonth(),start.getDate());
+   sheet.getCell('B2').numFmt='dd/mm/yyyy';
+
+   // Clear previous import rows while preserving the template layout.
+   for(let row=5;row<=2004;row++){
+    for(let col=1;col<=7;col++)sheet.getCell(row,col).value=null;
+   }
+
+   const approvedEntries=week.entries
+    .filter(e=>e.status==='Admin Approved')
+    .sort((a,b)=>a.date.localeCompare(b.date)||a.employee.localeCompare(b.employee));
+
+   approvedEntries.forEach((e,i)=>{
+    const row=5+i;
+    const [y,m,d]=e.date.split('-').map(Number);
+    sheet.getCell(row,1).value=e.employeeId;
+    sheet.getCell(row,2).value=e.employee;
+    sheet.getCell(row,3).value=new Date(y,m-1,d);
+    sheet.getCell(row,3).numFmt='dd/mm/yyyy';
+    sheet.getCell(row,4).value=e.type;
+    sheet.getCell(row,5).value=e.jobNumber||'';
+    sheet.getCell(row,6).value=e.totalHours;
+    sheet.getCell(row,6).numFmt='0.00';
+    sheet.getCell(row,7).value='Admin Approved';
+   });
+
+   workbook.calcProperties.fullCalcOnLoad=true;
+   workbook.calcProperties.forceFullCalc=true;
+   workbook.calcProperties.calcMode='auto';
+
+   const output=await workbook.xlsx.writeBuffer();
+   const blob=new Blob([output],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+   const url=URL.createObjectURL(blob);
+   const a=document.createElement('a');
+   a.href=url;
+   a.download=`Wages_${week.iso(week.days[0])}_to_${week.iso(week.days[6])}.xlsx`;
+   a.click();
+   URL.revokeObjectURL(url);
+   setMessage(`Wage workbook generated with ${approvedEntries.length} approved timesheet entr${approvedEntries.length===1?'y':'ies'}.`);
+  }catch(e){
+   setMessage(e instanceof Error?e.message:'Could not generate wage workbook');
+  }
+ }
+
  if(loading)return <div className="gate">Loading Office Admin…</div>;
  if(!user)return <div className="gate"><h1>Office Admin</h1><a href="/">Sign in through Timesheets</a></div>;
  if(user.role!=='admin')return <div className="gate"><h1>Office Admin only</h1><a href="/">Back to Timesheets</a></div>;
 
  return <div className="admin"><aside><div className="brand"><span>EC</span><div><b>Elliot Controls</b><small>Office Admin</small></div></div><nav>{(['dashboard','payroll','staff','integrations'] as Tab[]).map(t=><button key={t} className={tab===t?'active':''} onClick={()=>setTab(t)}>{t[0].toUpperCase()+t.slice(1)}</button>)}</nav><div className="bottom"><a href="/">Worker App</a><button onClick={logout}>Sign out</button></div></aside><main><header className="admintop"><div><span>OFFICE ADMIN</span><h1>{tab[0].toUpperCase()+tab.slice(1)}</h1></div><div className="weeks"><button onClick={()=>setOffset(v=>v-1)}>←</button><b>{week.label}</b><button onClick={()=>setOffset(v=>v+1)}>→</button></div></header>{message&&<div className="message">{message}</div>}
  {tab==='dashboard'&&<><section className="metrics"><Metric l="Active staff" v={active.length}/><Metric l="Final approved" v={approved.length}/><Metric l="Waiting for office" v={waiting.length}/><Metric l="Needs attention" v={rejected.length}/></section><section className="panel"><div className="panelhead"><div><span>FINAL APPROVAL</span><h2>{waiting.length?`${waiting.length} waiting`:'All clear'}</h2></div><button onClick={load}>Refresh</button></div>{waiting.map(e=><div className="approval" key={e.id}><div><b>{e.employee}</b><span>{e.date} • {e.type} • {e.totalHours.toFixed(2)} hrs {e.jobNumber?`• Job ${e.jobNumber}`:''}</span></div><div><button className="primary" onClick={()=>approve(e.id,'admin-approve')}>Final approve</button><button className="danger" onClick={()=>approve(e.id,'reject')}>Reject</button></div></div>)}</section></>}
- {tab==='payroll'&&<><section className="payhero"><div><span>WEDNESDAY → TUESDAY</span><h2>Payroll Preview</h2><p>Only Admin Approved entries are included.</p></div><button className="primary" onClick={exportCsv}>Export payroll CSV</button></section><section className="panel"><div className="panelhead"><h2>{week.label}</h2><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search employee"/></div><div className="tablewrap"><table><thead><tr><th>Employee</th><th>Work</th><th>RDO</th><th>Sick</th><th>Annual</th><th>P/Hol</th><th>Training</th><th>Total</th></tr></thead><tbody>{payroll.map(r=><tr key={r.s.employeeId}><td><b>{r.s.name}</b><small>{r.s.position}</small></td><td>{r.work.toFixed(2)}</td><td>{r.rdo.toFixed(2)}</td><td>{r.sick.toFixed(2)}</td><td>{r.annual.toFixed(2)}</td><td>{r.ph.toFixed(2)}</td><td>{r.training.toFixed(2)}</td><td><b>{r.total.toFixed(2)}</b></td></tr>)}</tbody></table></div></section></>}
+ {tab==='payroll'&&<><section className="payhero"><div><span>WEDNESDAY → TUESDAY</span><h2>Payroll Preview</h2><p>Only Admin Approved entries are included. Generate Wages uses your existing payroll template and formulas.</p></div><div className="payroll-actions"><button className="primary" onClick={generateWages}>Generate Wages.xlsx</button><button className="secondary-dark" onClick={exportCsv}>Export CSV</button></div></section><section className="panel"><div className="panelhead"><h2>{week.label}</h2><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search employee"/></div><div className="tablewrap"><table><thead><tr><th>Employee</th><th>Work</th><th>RDO</th><th>Sick</th><th>Annual</th><th>P/Hol</th><th>Training</th><th>Total</th></tr></thead><tbody>{payroll.map(r=><tr key={r.s.employeeId}><td><b>{r.s.name}</b><small>{r.s.position}</small></td><td>{r.work.toFixed(2)}</td><td>{r.rdo.toFixed(2)}</td><td>{r.sick.toFixed(2)}</td><td>{r.annual.toFixed(2)}</td><td>{r.ph.toFixed(2)}</td><td>{r.training.toFixed(2)}</td><td><b>{r.total.toFixed(2)}</b></td></tr>)}</tbody></table></div></section></>}
  {tab==='staff'&&<section className="panel"><div className="panelhead"><h2>Accounts & work patterns</h2><button onClick={load}>Refresh</button></div>{staff.map(s=>{const days=s.workDays||[3,4,5,1,2],opts:[string,number][]=[['Wed',3],['Thu',4],['Fri',5],['Sat',6],['Sun',0],['Mon',1],['Tue',2]];return <div className="staffrow" key={s.employeeId}><div><b>{s.name}</b><span>{s.position||'No position'} • Simpro #{s.employeeId}</span><div className="daypills">{opts.map(([l,n])=>{const on=days.includes(n);return <button key={l} className={on?'active':''} onClick={()=>setPattern(s.employeeId,on?days.filter(d=>d!==n):[...days,n].sort((a,b)=>a-b))}>{l}</button>})}</div></div><div><select value={s.role} onChange={e=>setRole(s.employeeId,e.target.value as any)}><option value="staff">Staff</option><option value="pm">Project Manager</option><option value="admin">Office Admin</option></select>{s.active?<><button onClick={()=>staffAction(s.employeeId,'reset-password')}>Reset</button><button className="danger" onClick={()=>staffAction(s.employeeId,'deactivate')}>Deactivate</button></>:<button className="primary" onClick={()=>staffAction(s.employeeId,'activate')}>Activate</button>}</div></div>})}</section>}
  {tab==='integrations'&&<section className="integrations"><Card t="Simpro" s="Connected" d="Live job lookup and Safe Mode verification." good/><Card t="MYOB" s="Not connected" d="Ready for API/OAuth setup."/><Card t="Payroll spreadsheet" s="Export ready" d="Approved payroll hours can be exported from the Payroll tab."/></section>}
  </main></div>
