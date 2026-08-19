@@ -8,6 +8,34 @@ type Entry={id:string;employeeId:string;employee:string;date:string;type:string;
 type Bindings=Env&{TIMESHEET_STORE:DurableObjectNamespace;ADMIN_SETUP_CODE?:string;BOOTSTRAP_ADMIN_CODE?:string;SIMPRO_API_KEY?:string};
 type PublicUser={employeeId:string;name:string;email:string;role:Role;position:string;mustChangePassword:boolean};
 type WorkPattern={days:number[]};
+
+type ClockSession={id:string;employeeId:string;employee:string;jobNumber:string;jobName:string;date:string;startLocal:string;startedAt:string;endedAt?:string;finishLocal?:string;status:'active'|'closed';timesheetId?:string};
+type QaResult='Pending'|'Pass'|'Fail'|'N/A';
+type QaTemplateItem={key:string;label:string;photoRequired?:boolean;readingLabel?:string};
+type QaTemplate={key:string;name:string;discipline:'BMS'|'Electrical';items:QaTemplateItem[]};
+type QaItem=QaTemplateItem&{result:QaResult;notes:string;reading:string;photoIds:string[];updatedBy?:string;updatedAt?:string;defectOpen?:boolean;rectifiedAt?:string};
+type QaInspection={id:string;jobNumber:string;discipline:'BMS'|'Electrical';templateKey:string;templateName:string;area:string;assetTag:string;title:string;createdBy:string;createdAt:string;updatedAt:string;items:QaItem[]};
+type QaPhotoMeta={id:string;inspectionId:string;itemKey:string;contentType:string;chunks:number;createdBy:string;createdAt:string};
+const QA_TEMPLATES:QaTemplate[]=[
+ {key:'bms-controller',name:'BMS Controller Installation',discipline:'BMS',items:[
+  {key:'mounted',label:'Controller mounted securely',photoRequired:true},{key:'label',label:'Controller and panel labels installed',photoRequired:true},{key:'power',label:'Power supply checked',readingLabel:'Supply voltage'},{key:'network',label:'Network address / communications verified',readingLabel:'Network / MAC / address'},{key:'io',label:'I/O wiring terminated and checked',photoRequired:true},{key:'point',label:'Point-to-point test complete'},{key:'alarms',label:'Alarms and safeties tested'},{key:'graphics',label:'Graphics / naming checked'},{key:'final',label:'Final installation condition acceptable',photoRequired:true}
+ ]},
+ {key:'bms-sensor',name:'BMS Sensor / Field Device',discipline:'BMS',items:[
+  {key:'location',label:'Installed in correct location',photoRequired:true},{key:'mount',label:'Mounted correctly and accessible'},{key:'label',label:'Device labelled',photoRequired:true},{key:'wiring',label:'Wiring terminated correctly',photoRequired:true},{key:'reading',label:'Reading verified against reference',readingLabel:'Measured / displayed value'},{key:'point',label:'Point-to-point verified'},{key:'final',label:'Final installation condition acceptable',photoRequired:true}
+ ]},
+ {key:'bms-panel',name:'BMS / Controls Panel',discipline:'BMS',items:[
+  {key:'mount',label:'Panel mounted level and secure',photoRequired:true},{key:'labels',label:'Labels, schedules and circuit identification complete',photoRequired:true},{key:'segregation',label:'ELV / LV segregation compliant',photoRequired:true},{key:'earth',label:'Earthing complete',readingLabel:'Earth continuity / result'},{key:'terminations',label:'Terminations checked and torqued'},{key:'power',label:'Supply voltage verified',readingLabel:'Voltage'},{key:'network',label:'Network communications operational'},{key:'clean',label:'Panel clean, penetrations sealed and spare entries blanked',photoRequired:true},{key:'final',label:'Final panel photos captured',photoRequired:true}
+ ]},
+ {key:'elec-switchboard',name:'Electrical Switchboard / MSSB',discipline:'Electrical',items:[
+  {key:'mount',label:'Board mounted level, secure and accessible',photoRequired:true},{key:'labels',label:'Main labels, circuit schedule and warning labels complete',photoRequired:true},{key:'cables',label:'Cable entry, gland and support complete',photoRequired:true},{key:'terminations',label:'Terminations checked / torqued'},{key:'earth',label:'Main earth / bonding checked',readingLabel:'Earth continuity result'},{key:'insulation',label:'Insulation resistance test complete',readingLabel:'IR test result'},{key:'polarity',label:'Polarity / phase rotation verified',readingLabel:'Result'},{key:'rcd',label:'RCD testing complete where applicable',readingLabel:'Trip time / current'},{key:'clean',label:'Board clean, covers fitted, blanks installed',photoRequired:true},{key:'final',label:'Final installation photos captured',photoRequired:true}
+ ]},
+ {key:'elec-circuit',name:'Electrical Final Subcircuit',discipline:'Electrical',items:[
+  {key:'route',label:'Cable route / containment complete and supported',photoRequired:true},{key:'label',label:'Circuit and device labels complete'},{key:'termination',label:'Terminations complete and secure',photoRequired:true},{key:'earth',label:'Earth continuity verified',readingLabel:'Earth continuity result'},{key:'ir',label:'Insulation resistance verified',readingLabel:'IR result'},{key:'polarity',label:'Polarity verified',readingLabel:'Result'},{key:'rcd',label:'RCD test completed where applicable',readingLabel:'Trip result'},{key:'functional',label:'Functional test completed'},{key:'final',label:'Final installed condition acceptable',photoRequired:true}
+ ]},
+ {key:'elec-lighting',name:'Lighting Installation',discipline:'Electrical',items:[
+  {key:'layout',label:'Fittings installed to correct layout',photoRequired:true},{key:'support',label:'Fittings and supports secure'},{key:'wiring',label:'Wiring / plug bases / terminations complete'},{key:'labels',label:'Circuit labels complete'},{key:'emergency',label:'Emergency lighting test complete where applicable',readingLabel:'Test result'},{key:'control',label:'Switching / control operation verified'},{key:'finish',label:'Fittings clean and damage free',photoRequired:true}
+ ]}
+];
 type SimproPreview={
  mode:'safe';
  checkedAt:string;
@@ -137,6 +165,43 @@ export class TimesheetStore{
    await this.state.storage.put(`pattern:${employeeId}`,{days} satisfies WorkPattern);
    return this.json({ok:true,workDays:days});
   }
+
+
+  if(request.method==='GET'&&path==='/clock/me'){
+   const active=await this.state.storage.get<ClockSession>(`clock-active:${user.id}`);return this.json({clock:active||null});
+  }
+  if(request.method==='POST'&&path==='/clock/start'){
+   const existing=await this.state.storage.get<ClockSession>(`clock-active:${user.id}`);if(existing)return this.json({error:`You are already clocked on to Job ${existing.jobNumber}.`},409);
+   const b=await request.json<Record<string,unknown>>(),jobNumber=String(b.jobNumber||'').trim();if(!/^\d+$/.test(jobNumber))return this.json({error:'Choose a valid Simpro job before clocking on.'},400);
+   const now=new Date(),id=crypto.randomUUID();const clock:ClockSession={id,employeeId:user.id,employee:user.name,jobNumber,jobName:String(b.jobName||`Job ${jobNumber}`),date:String(b.date||now.toISOString().slice(0,10)),startLocal:String(b.startLocal||now.toISOString().slice(11,16)),startedAt:now.toISOString(),status:'active'};
+   await this.state.storage.put(`clock:${id}`,clock);await this.state.storage.put(`clock-active:${user.id}`,clock);return this.json({clock},201);
+  }
+  if(request.method==='POST'&&path==='/clock/stop'){
+   const clock=await this.state.storage.get<ClockSession>(`clock-active:${user.id}`);if(!clock)return this.json({error:'You are not currently clocked on.'},409);
+   const b=await request.json<Record<string,unknown>>(),now=new Date(),hours=Math.max(.01,Math.round(((now.getTime()-new Date(clock.startedAt).getTime())/3600000)*100)/100),finishLocal=String(b.finishLocal||now.toISOString().slice(11,16));
+   const id=crypto.randomUUID();const entry:Entry={id,employeeId:user.id,employee:user.name,date:clock.date,type:'Work',jobNumber:clock.jobNumber,start:clock.startLocal,finish:finishLocal,breakMinutes:0,totalHours:hours,notes:'Created from Elliot Team clock on/off',status:'Submitted',createdAt:now.toISOString(),simproStatus:'Awaiting approval'};
+   clock.status='closed';clock.endedAt=now.toISOString();clock.finishLocal=finishLocal;clock.timesheetId=id;await this.state.storage.put(`clock:${clock.id}`,clock);await this.state.storage.delete(`clock-active:${user.id}`);await this.state.storage.put(`entry:${id}`,entry);return this.json({clock,entry});
+  }
+  if(request.method==='GET'&&path==='/clock/live'){
+   if(user.role==='staff')return this.json({error:'Supervisor permission required'},403);const rows=await this.state.storage.list<ClockSession>({prefix:'clock-active:'});return this.json({clocks:[...rows.values()].sort((a,b)=>a.employee.localeCompare(b.employee))});
+  }
+
+  if(request.method==='GET'&&path==='/qa/templates')return this.json({templates:QA_TEMPLATES});
+  if(request.method==='GET'&&path==='/qa/inspections'){
+   const u=new URL(request.url),job=u.searchParams.get('job')||'',all=u.searchParams.get('all')==='1';if(all&&user.role==='staff')return this.json({error:'Supervisor permission required'},403);
+   const rows=await this.state.storage.list<QaInspection>({prefix:'qa-inspection:'});let inspections=[...rows.values()];if(job)inspections=inspections.filter(x=>x.jobNumber===job);if(!all&&!job)return this.json({error:'Job number is required'},400);inspections.sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));return this.json({inspections});
+  }
+  if(request.method==='POST'&&path==='/qa/inspections'){
+   const b=await request.json<Record<string,unknown>>(),jobNumber=String(b.jobNumber||'').trim(),discipline=String(b.discipline||'') as 'BMS'|'Electrical',templateKey=String(b.templateKey||'');if(!/^\d+$/.test(jobNumber))return this.json({error:'A valid Simpro job is required.'},400);if(!['BMS','Electrical'].includes(discipline))return this.json({error:'Choose BMS or Electrical.'},400);const template=QA_TEMPLATES.find(t=>t.key===templateKey&&t.discipline===discipline);if(!template)return this.json({error:'Choose a valid QA template.'},400);
+   const now=new Date().toISOString(),inspection:QaInspection={id:crypto.randomUUID(),jobNumber,discipline,templateKey,templateName:template.name,area:String(b.area||'').trim(),assetTag:String(b.assetTag||'').trim(),title:String(b.title||'').trim(),createdBy:user.name,createdAt:now,updatedAt:now,items:template.items.map(i=>({...i,result:'Pending',notes:'',reading:'',photoIds:[]}))};
+   await this.state.storage.put(`qa-inspection:${inspection.id}`,inspection);return this.json({inspection},201);
+  }
+  const qaMatch=path.match(/^\/qa\/inspections\/([^/]+)$/);
+  if(request.method==='PATCH'&&qaMatch){const inspection=await this.state.storage.get<QaInspection>(`qa-inspection:${qaMatch[1]}`);if(!inspection)return this.json({error:'QA inspection not found'},404);const b=await request.json<Record<string,unknown>>(),action=String(b.action||'');if(action!=='update-item')return this.json({error:'Unknown QA action'},400);const item=inspection.items.find(i=>i.key===String(b.itemKey||''));if(!item)return this.json({error:'QA checklist item not found'},404);const previous=item.result;if(b.result!==undefined){const result=String(b.result) as QaResult;if(!['Pending','Pass','Fail','N/A'].includes(result))return this.json({error:'Invalid QA result'},400);if(result==='Pass'&&item.photoRequired&&item.photoIds.length===0)return this.json({error:'A photo is required before this QA check can be passed.'},409);item.result=result;if(result==='Fail')item.defectOpen=true;else if(previous==='Fail'||item.defectOpen){item.defectOpen=false;if(result==='Pass')item.rectifiedAt=new Date().toISOString()}}if(b.notes!==undefined)item.notes=String(b.notes||'');if(b.reading!==undefined)item.reading=String(b.reading||'');item.updatedBy=user.name;item.updatedAt=new Date().toISOString();inspection.updatedAt=item.updatedAt;await this.state.storage.put(`qa-inspection:${inspection.id}`,inspection);return this.json({inspection});}
+  const qaPhotoMatch=path.match(/^\/qa\/inspections\/([^/]+)\/photos$/);
+  if(request.method==='POST'&&qaPhotoMatch){const inspection=await this.state.storage.get<QaInspection>(`qa-inspection:${qaPhotoMatch[1]}`);if(!inspection)return this.json({error:'QA inspection not found'},404);const b=await request.json<Record<string,unknown>>(),itemKey=String(b.itemKey||''),dataUrl=String(b.dataUrl||'');const item=inspection.items.find(i=>i.key===itemKey);if(!item)return this.json({error:'QA checklist item not found'},404);const m=dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);if(!m)return this.json({error:'Photo must be a JPEG, PNG or WebP image.'},400);if(m[2].length>950000)return this.json({error:'Photo is too large after compression.'},413);const photoId=crypto.randomUUID(),chunkSize=80000,chunks=[...Array(Math.ceil(m[2].length/chunkSize))].map((_,i)=>m[2].slice(i*chunkSize,(i+1)*chunkSize));for(let i=0;i<chunks.length;i++)await this.state.storage.put(`qa-photo-chunk:${photoId}:${i}`,chunks[i]);const meta:QaPhotoMeta={id:photoId,inspectionId:inspection.id,itemKey,contentType:m[1],chunks:chunks.length,createdBy:user.name,createdAt:new Date().toISOString()};await this.state.storage.put(`qa-photo:${photoId}`,meta);item.photoIds.push(photoId);item.updatedBy=user.name;item.updatedAt=meta.createdAt;inspection.updatedAt=meta.createdAt;await this.state.storage.put(`qa-inspection:${inspection.id}`,inspection);return this.json({inspection,photoId},201);}
+  const qaPhotoGet=path.match(/^\/qa\/photos\/([^/]+)$/);
+  if(request.method==='GET'&&qaPhotoGet){const meta=await this.state.storage.get<QaPhotoMeta>(`qa-photo:${qaPhotoGet[1]}`);if(!meta)return new Response('Photo not found',{status:404});let b64='';for(let i=0;i<meta.chunks;i++)b64+=await this.state.storage.get<string>(`qa-photo-chunk:${meta.id}:${i}`)||'';const raw=atob(b64),bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);return new Response(bytes,{headers:{'content-type':meta.contentType,'cache-control':'private, max-age=3600'}});}
 
   if(request.method==='GET'&&path==='/timesheets'){
    const rows=await this.state.storage.list<Entry>({prefix:'entry:'});let entries=[...rows.values()].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));if(user.role==='staff')entries=entries.filter(e=>e.employeeId===user.id);else if(user.role==='pm')entries=entries.filter(e=>e.employeeId===user.id||e.status==='Submitted'||e.status==='PM Approved');return this.json({entries});

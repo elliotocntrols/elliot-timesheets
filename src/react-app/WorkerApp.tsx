@@ -1,83 +1,92 @@
 import {FormEvent,useEffect,useMemo,useState} from 'react';
 import {api,Entry,hoursBetween,JobOption,setManifest,User,workTypes,WorkType} from './appShared';
 
-function toIsoDate(date:Date){
- return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
-}
+type WorkerTab='clock'|'qa'|'timesheets';
+type ClockSession={id:string;employeeId:string;employee:string;jobNumber:string;jobName:string;date:string;startLocal:string;startedAt:string;endedAt?:string;status:'active'|'closed';timesheetId?:string};
+type QaTemplate={key:string;name:string;discipline:'BMS'|'Electrical';items:{key:string;label:string;photoRequired?:boolean;readingLabel?:string}[]};
+type QaItem={key:string;label:string;photoRequired?:boolean;readingLabel?:string;result:'Pending'|'Pass'|'Fail'|'N/A';notes:string;reading:string;photoIds:string[];updatedBy?:string;updatedAt?:string;defectOpen?:boolean;rectifiedAt?:string};
+type QaInspection={id:string;jobNumber:string;discipline:'BMS'|'Electrical';templateKey:string;templateName:string;area:string;assetTag:string;title:string;createdBy:string;createdAt:string;updatedAt:string;items:QaItem[]};
 
-function currentWedTueWeek(){
- const today=new Date();
- today.setHours(0,0,0,0);
- const start=new Date(today);
- start.setDate(today.getDate()-((today.getDay()-3+7)%7));
- return Array.from({length:7},(_,i)=>{
-  const d=new Date(start);
-  d.setDate(start.getDate()+i);
-  return d;
- });
+function toIsoDate(date:Date){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}
+function localTime(date=new Date()){return `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`}
+function currentWedTueWeek(){const today=new Date();today.setHours(0,0,0,0);const start=new Date(today);start.setDate(today.getDate()-((today.getDay()-3+7)%7));return Array.from({length:7},(_,i)=>{const d=new Date(start);d.setDate(start.getDate()+i);return d})}
+function elapsed(startedAt:string){const ms=Math.max(0,Date.now()-new Date(startedAt).getTime()),h=Math.floor(ms/3600000),m=Math.floor(ms%3600000/60000);return `${h}h ${String(m).padStart(2,'0')}m`}
+
+async function compressPhoto(file:File){
+ const data=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=()=>reject(reader.error);reader.readAsDataURL(file)});
+ const img=await new Promise<HTMLImageElement>((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=data});
+ const max=1280,scale=Math.min(1,max/Math.max(img.width,img.height)),w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale));
+ const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Photo could not be processed');ctx.drawImage(img,0,0,w,h);
+ return canvas.toDataURL('image/jpeg',.68);
 }
 
 export default function WorkerApp(){
  const[user,setUser]=useState<User|null>(null),[entries,setEntries]=useState<Entry[]>([]),[loading,setLoading]=useState(true),[message,setMessage]=useState('');
- const[login,setLogin]=useState({identifier:'',password:''}),[show,setShow]=useState(false);
- const[jobs,setJobs]=useState<JobOption[]>([]),[jobSearch,setJobSearch]=useState(''),[jobOpen,setJobOpen]=useState(false);
- const[qrJob,setQrJob]=useState<JobOption|null>(null),[qrLoading,setQrLoading]=useState(false);
+ const[login,setLogin]=useState({identifier:'',password:''}),[show,setShow]=useState(false),[tab,setTab]=useState<WorkerTab>('clock');
+ const[jobs,setJobs]=useState<JobOption[]>([]),[jobSearch,setJobSearch]=useState(''),[jobOpen,setJobOpen]=useState(false),[selectedJob,setSelectedJob]=useState<JobOption|null>(null),[qrLoading,setQrLoading]=useState(false);
+ const[clock,setClock]=useState<ClockSession|null>(null),[nowTick,setNowTick]=useState(0),[clockBusy,setClockBusy]=useState(false);
+ const[templates,setTemplates]=useState<QaTemplate[]>([]),[inspections,setInspections]=useState<QaInspection[]>([]),[qaBusy,setQaBusy]=useState(false),[openQa,setOpenQa]=useState<Record<string,boolean>>({});
+ const[qaForm,setQaForm]=useState({discipline:'BMS' as 'BMS'|'Electrical',templateKey:'',area:'',assetTag:'',title:''});
  const[editing,setEditing]=useState<string|null>(null);
- const weekDays=useMemo(()=>currentWedTueWeek(),[]);
- const todayIso=toIsoDate(new Date());
- const defaultDate=weekDays.some(d=>toIsoDate(d)===todayIso)?todayIso:toIsoDate(weekDays[0]);
+ const weekDays=useMemo(()=>currentWedTueWeek(),[]),todayIso=toIsoDate(new Date()),defaultDate=weekDays.some(d=>toIsoDate(d)===todayIso)?todayIso:toIsoDate(weekDays[0]);
  const[form,setForm]=useState({date:defaultDate,type:'Work' as WorkType,jobNumber:'',start:'07:00',finish:'15:30',breakMinutes:0,notes:''});
- const total=useMemo(()=>hoursBetween(form.start,form.finish,0),[form.start,form.finish]);
- const selectedDate=useMemo(()=>new Date(`${form.date}T00:00:00`),[form.date]);
+ const total=useMemo(()=>hoursBetween(form.start,form.finish,0),[form.start,form.finish]),selectedDate=useMemo(()=>new Date(`${form.date}T00:00:00`),[form.date]);
+ const q=jobSearch.toLowerCase(),matches=(q?jobs.filter(j=>`${j.id} ${j.name} ${j.site} ${j.customer}`.toLowerCase().includes(q)):jobs).slice(0,20);
+ const selectedTemplate=templates.find(t=>t.key===qaForm.templateKey),disciplineTemplates=templates.filter(t=>t.discipline===qaForm.discipline);
 
  useEffect(()=>{setManifest(false);void load()},[]);
- useEffect(()=>{if(user)void loadQrJob()},[user?.employeeId]);
- async function load(){try{const m=await api<{user:User}>('/api/auth/me');setUser(m.user);const t=await api<{entries:Entry[]}>('/api/timesheets');setEntries(t.entries)}catch{setUser(null)}finally{setLoading(false)}}
- async function loginNow(e:FormEvent){e.preventDefault();try{const m=await api<{user:User}>('/api/auth/login',{method:'POST',body:JSON.stringify(login)});setUser(m.user);await load()}catch(e){setMessage(e instanceof Error?e.message:'Login failed')}}
- async function logout(){await api('/api/auth/logout',{method:'POST'});setUser(null)}
- async function loadQrJob(){
-  const jobId=new URLSearchParams(window.location.search).get('job');
-  if(!jobId||!/^[0-9]+$/.test(jobId))return;
-  setQrLoading(true);
-  try{
-   const d=await api<{job:JobOption}>(`/api/simpro-job/${encodeURIComponent(jobId)}`);
-   const j=d.job;setQrJob(j);setForm(f=>({...f,type:'Work',jobNumber:String(j.id)}));setJobSearch(`${j.id} — ${j.name||j.site||'Simpro job'}`);setJobOpen(false);setMessage(`Job ${j.id} selected from site QR.`);
-  }catch(e){setMessage(e instanceof Error?e.message:'Could not load the job from this QR code')}
-  finally{setQrLoading(false)}
- }
- async function loadJobs(){if(jobs.length)return;const d=await api<{jobs:JobOption[]}>('/api/simpro-jobs');setJobs(d.jobs||[])}
- function choose(j:JobOption){setQrJob(null);setForm({...form,jobNumber:String(j.id)});setJobSearch(`${j.id} — ${j.name||j.site}`);setJobOpen(false)}
- async function save(){
-  setMessage('');
-  if(form.type==='Work'&&!form.jobNumber.trim())return setMessage('Choose a Simpro job.');
-  if(total<=0)return setMessage('Check times.');
-  try{
-   const payload={...form,breakMinutes:0,totalHours:total};
-   if(editing)await api(`/api/timesheets/${editing}`,{method:'PATCH',body:JSON.stringify({action:'edit',...payload})});
-   else await api('/api/timesheets',{method:'POST',body:JSON.stringify(payload)});
-   setMessage(editing?'Updated and resubmitted.':'Submitted.');
-   resetEntry();await load();
-  }catch(e){setMessage(e instanceof Error?e.message:'Could not save')}
- }
- function edit(e:Entry){setEditing(e.id);setForm({date:e.date,type:e.type,jobNumber:e.jobNumber,start:e.start,finish:e.finish,breakMinutes:0,notes:e.notes||''});setJobSearch(e.jobNumber?`Job ${e.jobNumber}`:'');scrollTo({top:0,behavior:'smooth'})}
- function resetEntry(){
-  setEditing(null);
-  const keep=qrJob;
-  setForm({date:defaultDate,type:'Work',jobNumber:keep?String(keep.id):'',start:'07:00',finish:'15:30',breakMinutes:0,notes:''});
-  setJobSearch(keep?`${keep.id} — ${keep.name||keep.site||'Simpro job'}`:'');
-  setJobOpen(false);
- }
- async function del(e:Entry){if(!confirm('Delete this timesheet?'))return;await api(`/api/timesheets/${e.id}`,{method:'DELETE'});await load()}
- const q=jobSearch.toLowerCase(),matches=(q?jobs.filter(j=>`${j.id} ${j.name} ${j.site} ${j.customer}`.toLowerCase().includes(q)):jobs).slice(0,20);
+ useEffect(()=>{const i=setInterval(()=>setNowTick(v=>v+1),30000);return()=>clearInterval(i)},[]);
+ useEffect(()=>{if(user){void loadQrJob();void loadClock();void loadTemplates()}},[user?.employeeId]);
+ useEffect(()=>{if(selectedJob&&tab==='qa')void loadQa(selectedJob.id)},[selectedJob?.id,tab]);
+ useEffect(()=>{if(!disciplineTemplates.some(t=>t.key===qaForm.templateKey))setQaForm(f=>({...f,templateKey:disciplineTemplates[0]?.key||''}))},[qaForm.discipline,templates.length]);
 
- if(loading)return <div className="gate">Loading…</div>;
- if(!user)return <div className="auth-shell"><div className="auth-card"><b>ELLIOT CONTROLS</b><h1>Timesheets</h1>{new URLSearchParams(window.location.search).get('job')&&<div className="qr-login-note"><b>Job-site QR detected</b><span>Sign in and this job will be selected automatically.</span></div>}{message&&<div className="message">{message}</div>}<form onSubmit={loginNow}><label>Full name or email<input value={login.identifier} onChange={e=>setLogin({...login,identifier:e.target.value})}/></label><label>Password<div className="pass"><input type={show?'text':'password'} value={login.password} onChange={e=>setLogin({...login,password:e.target.value})}/><button type="button" onClick={()=>setShow(v=>!v)}>👁️</button></div></label><button className="primary">Sign in</button></form></div></div>;
+ async function load(){try{const m=await api<{user:User}>('/api/auth/me');setUser(m.user);const t=await api<{entries:Entry[]}>('/api/timesheets');setEntries(t.entries)}catch{setUser(null)}finally{setLoading(false)}}
+ async function loginNow(e:FormEvent){e.preventDefault();try{const m=await api<{user:User}>('/api/auth/login',{method:'POST',body:JSON.stringify(login)});setUser(m.user);setLogin({identifier:'',password:''});await load()}catch(e){setMessage(e instanceof Error?e.message:'Login failed')}}
+ async function logout(){await api('/api/auth/logout',{method:'POST'});setUser(null)}
+ async function loadJobs(){if(jobs.length)return;const d=await api<{jobs:JobOption[]}>('/api/simpro-jobs');setJobs(d.jobs||[])}
+ function choose(j:JobOption){setSelectedJob(j);setForm(f=>({...f,jobNumber:String(j.id)}));setJobSearch(`${j.id} — ${j.name||j.site||'Simpro job'}`);setJobOpen(false)}
+ async function loadQrJob(){const jobId=new URLSearchParams(window.location.search).get('job');if(!jobId||!/^[0-9]+$/.test(jobId))return;setQrLoading(true);try{const d=await api<{job:JobOption}>(`/api/simpro-job/${encodeURIComponent(jobId)}`);choose(d.job);setMessage(`Job ${d.job.id} selected from site QR.`)}catch(e){setMessage(e instanceof Error?e.message:'Could not load the job from this QR code')}finally{setQrLoading(false)}}
+ async function loadClock(){try{const d=await api<{clock:ClockSession|null}>('/api/clock/me');setClock(d.clock)}catch{setClock(null)}}
+ async function clockOn(){if(!selectedJob)return setMessage('Choose or scan a job first.');setClockBusy(true);setMessage('');try{const d=await api<{clock:ClockSession}>('/api/clock/start',{method:'POST',body:JSON.stringify({jobNumber:String(selectedJob.id),jobName:selectedJob.name||selectedJob.site||`Job ${selectedJob.id}`,date:toIsoDate(new Date()),startLocal:localTime()})});setClock(d.clock);setMessage(`Clocked on to Job ${selectedJob.id}.`)}catch(e){setMessage(e instanceof Error?e.message:'Could not clock on')}finally{setClockBusy(false)}}
+ async function clockOff(){setClockBusy(true);setMessage('');try{const d=await api<{clock:ClockSession;entry:Entry}>('/api/clock/stop',{method:'POST',body:JSON.stringify({finishLocal:localTime()})});setClock(null);setMessage(`Clocked off. ${d.entry.totalHours.toFixed(2)} hrs submitted for approval.`);await load()}catch(e){setMessage(e instanceof Error?e.message:'Could not clock off')}finally{setClockBusy(false)}}
+ async function loadTemplates(){try{const d=await api<{templates:QaTemplate[]}>('/api/qa/templates');setTemplates(d.templates||[])}catch{}}
+ async function loadQa(job:number|string){try{const d=await api<{inspections:QaInspection[]}>(`/api/qa/inspections?job=${encodeURIComponent(String(job))}`);setInspections(d.inspections||[])}catch(e){setMessage(e instanceof Error?e.message:'Could not load QA')}}
+ async function createInspection(){if(!selectedJob)return setMessage('Choose a job first.');if(!qaForm.templateKey)return setMessage('Choose a QA template.');if(!qaForm.area.trim()&&!qaForm.assetTag.trim())return setMessage('Enter an area or equipment tag.');setQaBusy(true);try{const d=await api<{inspection:QaInspection}>('/api/qa/inspections',{method:'POST',body:JSON.stringify({jobNumber:String(selectedJob.id),discipline:qaForm.discipline,templateKey:qaForm.templateKey,area:qaForm.area.trim(),assetTag:qaForm.assetTag.trim(),title:qaForm.title.trim()})});setInspections(v=>[d.inspection,...v]);setOpenQa(v=>({...v,[d.inspection.id]:true}));setQaForm(f=>({...f,area:'',assetTag:'',title:''}));setMessage('QA item created. Complete the checks and attach evidence photos.') }catch(e){setMessage(e instanceof Error?e.message:'Could not create QA inspection')}finally{setQaBusy(false)}}
+ async function updateQa(inspectionId:string,itemKey:string,patch:Partial<Pick<QaItem,'result'|'notes'|'reading'>>){setQaBusy(true);try{const d=await api<{inspection:QaInspection}>(`/api/qa/inspections/${inspectionId}`,{method:'PATCH',body:JSON.stringify({action:'update-item',itemKey,...patch})});setInspections(rows=>rows.map(x=>x.id===inspectionId?d.inspection:x))}catch(e){setMessage(e instanceof Error?e.message:'Could not update QA')}finally{setQaBusy(false)}}
+ async function addPhoto(inspectionId:string,itemKey:string,file?:File){if(!file)return;setQaBusy(true);setMessage('Compressing and uploading photo…');try{const dataUrl=await compressPhoto(file);const d=await api<{inspection:QaInspection}>(`/api/qa/inspections/${inspectionId}/photos`,{method:'POST',body:JSON.stringify({itemKey,dataUrl})});setInspections(rows=>rows.map(x=>x.id===inspectionId?d.inspection:x));setMessage('QA photo added.')}catch(e){setMessage(e instanceof Error?e.message:'Could not add photo')}finally{setQaBusy(false)}}
+
+ async function save(){setMessage('');if(form.type==='Work'&&!form.jobNumber.trim())return setMessage('Choose a Simpro job.');if(total<=0)return setMessage('Check times.');try{const payload={...form,breakMinutes:0,totalHours:total};if(editing)await api(`/api/timesheets/${editing}`,{method:'PATCH',body:JSON.stringify({action:'edit',...payload})});else await api('/api/timesheets',{method:'POST',body:JSON.stringify(payload)});setMessage(editing?'Updated and resubmitted.':'Submitted.');resetEntry();await load()}catch(e){setMessage(e instanceof Error?e.message:'Could not save')}}
+ function edit(e:Entry){setEditing(e.id);setForm({date:e.date,type:e.type,jobNumber:e.jobNumber,start:e.start,finish:e.finish,breakMinutes:0,notes:e.notes||''});setJobSearch(e.jobNumber?`Job ${e.jobNumber}`:'');setTab('timesheets');scrollTo({top:0,behavior:'smooth'})}
+ function resetEntry(){setEditing(null);setForm({date:defaultDate,type:'Work',jobNumber:selectedJob?String(selectedJob.id):'',start:'07:00',finish:'15:30',breakMinutes:0,notes:''});setJobSearch(selectedJob?`${selectedJob.id} — ${selectedJob.name||selectedJob.site||'Simpro job'}`:'');setJobOpen(false)}
+ async function del(e:Entry){if(!confirm('Delete this timesheet?'))return;await api(`/api/timesheets/${e.id}`,{method:'DELETE'});await load()}
+
+ if(loading)return <div className="gate">Loading Elliot Team…</div>;
+ if(!user)return <div className="auth-shell"><div className="auth-card"><b>ELLIOT CONTROLS</b><h1>Elliot Team</h1><p className="muted">Time • QA • Site</p>{new URLSearchParams(window.location.search).get('job')&&<div className="qr-login-note"><b>Job-site QR detected</b><span>Sign in and this project will open automatically.</span></div>}{message&&<div className="message">{message}</div>}<form onSubmit={loginNow}><label>Full name or email<input value={login.identifier} onChange={e=>setLogin({...login,identifier:e.target.value})}/></label><label>Password<div className="pass"><input type={show?'text':'password'} value={login.password} onChange={e=>setLogin({...login,password:e.target.value})}/><button type="button" onClick={()=>setShow(v=>!v)}>👁️</button></div></label><button className="primary">Sign in</button></form></div></div>;
 
  const mine=entries.filter(e=>e.employeeId===user.employeeId);
- return <div className="worker"><header><div><span>ELLIOT CONTROLS</span><strong>Timesheets</strong></div><button onClick={logout}>Sign out</button></header><main>{message&&<div className="message">{message}</div>}<section className="entry-card"><div className="entry-head"><div><span>{editing?'EDIT ENTRY':'SELECT A DAY'}</span><h1>{selectedDate.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'})}</h1></div><div className="hours"><b>{total.toFixed(2)}</b><small>hrs</small></div></div>{qrJob&&<div className="qr-job-banner"><div><span>JOB-SITE QR</span><b>Job {qrJob.id} — {qrJob.name||qrJob.site||'Simpro job'}</b>{qrJob.site&&<small>{qrJob.site}</small>}</div><span className="qr-job-check">✓</span></div>}{qrLoading&&<div className="qr-job-banner loading">Loading job from QR…</div>}<form onSubmit={e=>{e.preventDefault();void save()}}>
- <div className="types">{workTypes.map(t=><button type="button" key={t} className={form.type===t?'active':''} onClick={()=>{setForm({...form,type:t,jobNumber:t==='Work'?form.jobNumber:''});if(t!=='Work'){setJobSearch('');setQrJob(null)}}}>{t}</button>)}</div>
- {form.type==='Work'&&<label>Job<div className="jobpick"><input value={jobSearch} onFocus={()=>{setJobOpen(true);void loadJobs()}} onChange={e=>{setJobSearch(e.target.value);setForm({...form,jobNumber:''});setQrJob(null);setJobOpen(true);void loadJobs()}} placeholder="Search job name or number"/>{jobOpen&&<div className="jobmenu">{matches.map(j=><button type="button" key={j.id} onClick={()=>choose(j)}><b>{j.name||`Job ${j.id}`}</b><span>#{j.id}</span></button>)}</div>}</div></label>}
- <div className="times no-break"><label>Start<input type="time" value={form.start} onChange={e=>setForm({...form,start:e.target.value})}/></label><label>Finish<input type="time" value={form.finish} onChange={e=>setForm({...form,finish:e.target.value})}/></label></div>
- <div className="worker-week-block"><span className="week-label">WEDNESDAY → TUESDAY</span><div className="worker-week-days">{weekDays.map(d=>{const iso=toIsoDate(d),active=iso===form.date;return <button type="button" key={iso} className={active?'active':''} onClick={()=>setForm({...form,date:iso})}><span>{d.toLocaleDateString('en-AU',{weekday:'short'}).replace('.','')}</span><b>{d.getDate()}</b></button>})}</div><button className="primary compact-submit" type="button" onClick={()=>void save()}><span>{editing?'Save & resubmit':'Submit day'}</span><b>{total.toFixed(2)} hrs</b></button></div>
- </form></section><section className="list"><h2>My recent timesheets</h2>{mine.slice(0,10).map(e=><div className="row" key={e.id}><div><b>{e.date} • {e.type}</b><span>{e.totalHours.toFixed(2)} hrs {e.jobNumber?`• Job ${e.jobNumber}`:''}</span><small>{e.status}</small></div>{['Submitted','Rejected'].includes(e.status)&&<div><button onClick={()=>edit(e)}>Edit</button><button className="danger" onClick={()=>del(e)}>Delete</button></div>}</div>)}</section>{user.role==='admin'&&<a className="adminlink" href="/admin">Open Office Admin Console →</a>}</main></div>
+ return <div className="worker team-worker"><header><div><span>ELLIOT CONTROLS</span><strong>Elliot Team</strong></div><button onClick={logout}>Sign out</button></header><main>
+  {message&&<div className="message">{message}</div>}
+  <nav className="team-mobile-nav"><button className={tab==='clock'?'active':''} onClick={()=>setTab('clock')}>⏱ Clock</button><button className={tab==='qa'?'active':''} onClick={()=>setTab('qa')}>✓ QA</button><button className={tab==='timesheets'?'active':''} onClick={()=>setTab('timesheets')}>▦ Time</button></nav>
+  {selectedJob&&<div className="team-job-strip"><div><span>ACTIVE PROJECT</span><b>Job {selectedJob.id} — {selectedJob.name||selectedJob.site||'Simpro job'}</b>{selectedJob.site&&<small>{selectedJob.site}</small>}</div><button onClick={()=>{setSelectedJob(null);setJobSearch('')}}>Change</button></div>}
+  {qrLoading&&<div className="qr-job-banner loading">Loading project from QR…</div>}
+
+  {tab==='clock'&&<section className="team-module clock-module"><div className="module-title"><div><span>SITE TIME</span><h1>{clock?'You are clocked on':'Clock on to a project'}</h1></div>{clock&&<div className="live-pill">LIVE</div>}</div>
+   {clock?<div className="clock-live-card"><div><span>JOB</span><h2>#{clock.jobNumber} {clock.jobName}</h2><p>Started {clock.startLocal} • {clock.date}</p></div><div className="clock-duration"><b key={nowTick}>{elapsed(clock.startedAt)}</b><small>on site</small></div><button className="clock-off" disabled={clockBusy} onClick={()=>void clockOff()}>{clockBusy?'Saving…':'Clock off & submit time'}</button></div>
+   :<><JobPicker loadJobs={loadJobs} matches={matches} open={jobOpen} search={jobSearch} setOpen={setJobOpen} setSearch={v=>{setJobSearch(v);setSelectedJob(null);setJobOpen(true);void loadJobs()}} choose={choose}/><button className="clock-on" disabled={!selectedJob||clockBusy} onClick={()=>void clockOn()}>{clockBusy?'Starting…':'Clock on now'}</button><p className="module-help">Scan the project QR on site or search the Simpro job. Clock-off automatically creates the timesheet for approval.</p></>}
+  </section>}
+
+  {tab==='qa'&&<section className="team-module qa-module"><div className="module-title"><div><span>QA / COMMISSIONING</span><h1>Installed item QA</h1><p>BMS and Electrical quality evidence linked to the project.</p></div></div>
+   {!selectedJob?<JobPicker loadJobs={loadJobs} matches={matches} open={jobOpen} search={jobSearch} setOpen={setJobOpen} setSearch={v=>{setJobSearch(v);setJobOpen(true);void loadJobs()}} choose={choose}/>:<>
+    <div className="qa-create"><div className="qa-discipline"><button className={qaForm.discipline==='BMS'?'active':''} onClick={()=>setQaForm({...qaForm,discipline:'BMS',templateKey:''})}>BMS</button><button className={qaForm.discipline==='Electrical'?'active':''} onClick={()=>setQaForm({...qaForm,discipline:'Electrical',templateKey:''})}>Electrical</button></div><label>QA template<select value={qaForm.templateKey} onChange={e=>setQaForm({...qaForm,templateKey:e.target.value})}><option value="">Choose template</option>{disciplineTemplates.map(t=><option key={t.key} value={t.key}>{t.name}</option>)}</select></label><div className="qa-create-grid"><label>Area / level<input value={qaForm.area} onChange={e=>setQaForm({...qaForm,area:e.target.value})} placeholder="e.g. Level 4 Plantroom"/></label><label>Equipment tag<input value={qaForm.assetTag} onChange={e=>setQaForm({...qaForm,assetTag:e.target.value})} placeholder="e.g. MSSB-4 or AHU-04 SAT"/></label></div><label>Description <span className="optional">optional</span><input value={qaForm.title} onChange={e=>setQaForm({...qaForm,title:e.target.value})} placeholder={selectedTemplate?.name||'Installed item'}/></label><button className="primary" disabled={qaBusy} onClick={()=>void createInspection()}>+ Add QA item</button></div>
+    <div className="qa-inspection-list">{inspections.length===0?<div className="empty-team"><b>No QA items yet for this project.</b><span>Add the first installed item above.</span></div>:inspections.map(ins=>{const done=ins.items.filter(i=>i.result!=='Pending').length,failed=ins.items.filter(i=>i.defectOpen).length,photos=ins.items.reduce((a,i)=>a+i.photoIds.length,0),open=!!openQa[ins.id];return <article className={`qa-inspection ${open?'open':''}`} key={ins.id}><button className="qa-inspection-head" onClick={()=>setOpenQa(v=>({...v,[ins.id]:!open}))}><div><span>{ins.discipline} • {ins.area||'No area'}</span><b>{ins.assetTag||ins.title||ins.templateName}</b><small>{ins.templateName}</small></div><div><strong>{done}/{ins.items.length}</strong><small>{photos} photos {failed?`• ${failed} defect${failed===1?'':'s'}`:''}</small></div></button>{open&&<div className="qa-checks">{ins.items.map(item=><div className={`qa-check ${item.result.toLowerCase().replace('/','')}`} key={item.key}><div className="qa-check-title"><b>{item.label}</b>{item.photoRequired&&<span>PHOTO REQUIRED</span>}{item.defectOpen&&<span className="defect-chip">OPEN DEFECT</span>}</div><div className="qa-result-buttons"><button className={item.result==='Pass'?'active pass':''} disabled={qaBusy} onClick={()=>void updateQa(ins.id,item.key,{result:'Pass'})}>Pass</button><button className={item.result==='Fail'?'active fail':''} disabled={qaBusy} onClick={()=>void updateQa(ins.id,item.key,{result:'Fail'})}>Fail</button><button className={item.result==='N/A'?'active':''} disabled={qaBusy} onClick={()=>void updateQa(ins.id,item.key,{result:'N/A'})}>N/A</button></div>{item.readingLabel&&<label>{item.readingLabel}<input defaultValue={item.reading} onBlur={e=>void updateQa(ins.id,item.key,{reading:e.target.value})} placeholder="Enter test reading"/></label>}<label>Notes<input defaultValue={item.notes} onBlur={e=>void updateQa(ins.id,item.key,{notes:e.target.value})} placeholder="QA notes / defect detail"/></label><div className="qa-photo-row"><label className="photo-add">📷 Add photo<input type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files?.[0];void addPhoto(ins.id,item.key,f);e.currentTarget.value=''}}/></label>{item.photoIds.map(id=><a key={id} href={`/api/qa/photos/${id}`} target="_blank" rel="noreferrer"><img src={`/api/qa/photos/${id}`} alt="QA evidence"/></a>)}</div></div>)}</div>}</article>})}</div>
+   </>}
+  </section>}
+
+  {tab==='timesheets'&&<><section className="entry-card"><div className="entry-head"><div><span>{editing?'EDIT ENTRY':'MANUAL TIME'}</span><h1>{selectedDate.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'})}</h1></div><div className="hours"><b>{total.toFixed(2)}</b><small>hrs</small></div></div><form onSubmit={e=>{e.preventDefault();void save()}}><div className="types">{workTypes.map(t=><button type="button" key={t} className={form.type===t?'active':''} onClick={()=>setForm({...form,type:t,jobNumber:t==='Work'?form.jobNumber:''})}>{t}</button>)}</div>{form.type==='Work'&&<JobPicker loadJobs={loadJobs} matches={matches} open={jobOpen} search={jobSearch} setOpen={setJobOpen} setSearch={v=>{setJobSearch(v);setForm({...form,jobNumber:''});setSelectedJob(null);setJobOpen(true);void loadJobs()}} choose={choose}/>}<div className="times no-break"><label>Start<input type="time" value={form.start} onChange={e=>setForm({...form,start:e.target.value})}/></label><label>Finish<input type="time" value={form.finish} onChange={e=>setForm({...form,finish:e.target.value})}/></label></div><div className="worker-week-block"><span className="week-label">WEDNESDAY → TUESDAY</span><div className="worker-week-days">{weekDays.map(d=>{const iso=toIsoDate(d),active=iso===form.date;return <button type="button" key={iso} className={active?'active':''} onClick={()=>setForm({...form,date:iso})}><span>{d.toLocaleDateString('en-AU',{weekday:'short'}).replace('.','')}</span><b>{d.getDate()}</b></button>})}</div><button className="primary compact-submit" type="button" onClick={()=>void save()}><span>{editing?'Save & resubmit':'Submit day'}</span><b>{total.toFixed(2)} hrs</b></button></div></form></section><section className="list"><h2>My recent timesheets</h2>{mine.slice(0,12).map(e=><div className="row" key={e.id}><div><b>{e.date} • {e.type}</b><span>{e.totalHours.toFixed(2)} hrs {e.jobNumber?`• Job ${e.jobNumber}`:''}</span><small>{e.status}</small></div>{['Submitted','Rejected'].includes(e.status)&&<div><button onClick={()=>edit(e)}>Edit</button><button className="danger" onClick={()=>del(e)}>Delete</button></div>}</div>)}</section></>}
+  {user.role==='admin'&&<a className="adminlink" href="/admin">Open Office Admin Console →</a>}
+ </main></div>
+}
+
+function JobPicker({loadJobs,matches,open,search,setOpen,setSearch,choose}:{loadJobs:()=>Promise<void>;matches:JobOption[];open:boolean;search:string;setOpen:(v:boolean)=>void;setSearch:(v:string)=>void;choose:(j:JobOption)=>void}){
+ return <label>Project / Simpro job<div className="jobpick"><input value={search} onFocus={()=>{setOpen(true);void loadJobs()}} onChange={e=>setSearch(e.target.value)} placeholder="Search job name or number"/>{open&&<div className="jobmenu">{matches.length===0?<div className="job-empty">No matching jobs</div>:matches.map(j=><button type="button" key={j.id} onClick={()=>choose(j)}><b>{j.name||`Job ${j.id}`}</b><span>#{j.id}{j.site?` • ${j.site}`:''}</span></button>)}</div>}</div></label>
 }

@@ -2,9 +2,12 @@ import {useEffect,useMemo,useState} from 'react';
 import ExcelJS from 'exceljs';
 import {api,Entry,JobOption,setManifest,StaffRow,User} from './appShared';
 
-type Tab='dashboard'|'payroll'|'staff'|'jobqr'|'integrations';
+type Tab='dashboard'|'live'|'qa'|'payroll'|'staff'|'jobqr'|'integrations';
 type SimproPreview={ready:boolean;message:string;employeeName:string;employeeId:string;jobName?:string;jobId:string|number;date:string;start:string;finish:string;totalHours:number;duplicate?:boolean};
 type AdminEntry=Entry&{pmApprovedBy?:string;adminApprovedBy?:string;simproPreview?:SimproPreview};
+type ClockSession={id:string;employeeId:string;employee:string;jobNumber:string;jobName:string;date:string;startLocal:string;startedAt:string;status:'active'|'closed'};
+type QaItem={key:string;label:string;result:'Pending'|'Pass'|'Fail'|'N/A';notes:string;reading:string;photoIds:string[];defectOpen?:boolean};
+type QaInspection={id:string;jobNumber:string;discipline:'BMS'|'Electrical';templateName:string;area:string;assetTag:string;title:string;createdBy:string;createdAt:string;updatedAt:string;items:QaItem[]};
 
 export default function AdminApp(){
  const[user,setUser]=useState<User|null>(null);
@@ -25,9 +28,19 @@ export default function AdminApp(){
  const[jobsLoading,setJobsLoading]=useState(false);
  const[jobQrSearch,setJobQrSearch]=useState('');
  const[selectedJob,setSelectedJob]=useState<JobOption|null>(null);
+ const[liveClocks,setLiveClocks]=useState<ClockSession[]>([]);
+ const[qaInspections,setQaInspections]=useState<QaInspection[]>([]);
+ const[qaFilter,setQaFilter]=useState<'all'|'BMS'|'Electrical'|'defects'>('all');
 
  useEffect(()=>{setManifest(true);void load()},[]);
- useEffect(()=>{if(tab==='jobqr'&&user?.role==='admin'&&!jobs.length)void loadJobs()},[tab,user?.role]);
+ useEffect(()=>{if((tab==='jobqr'||tab==='qa')&&user?.role==='admin'&&!jobs.length)void loadJobs()},[tab,user?.role]);
+ useEffect(()=>{if(tab==='live')void loadLive();if(tab==='qa')void loadQaAdmin()},[tab]);
+ useEffect(()=>{if(tab!=='live')return;const i=setInterval(()=>void loadLive(),30000);return()=>clearInterval(i)},[tab]);
+
+
+ async function loadLive(){try{const d=await api<{clocks:ClockSession[]}>('/api/clock/live');setLiveClocks(d.clocks||[])}catch(e){setMessage(e instanceof Error?e.message:'Could not load live workforce')}}
+ async function loadQaAdmin(){try{const d=await api<{inspections:QaInspection[]}>('/api/qa/inspections?all=1');setQaInspections(d.inspections||[])}catch(e){setMessage(e instanceof Error?e.message:'Could not load QA')}}
+ function clockElapsed(startedAt:string){const ms=Math.max(0,Date.now()-new Date(startedAt).getTime()),h=Math.floor(ms/3600000),m=Math.floor(ms%3600000/60000);return `${h}h ${String(m).padStart(2,'0')}m`}
 
  async function loadJobs(){
   setJobsLoading(true);setMessage('');
@@ -230,11 +243,11 @@ export default function AdminApp(){
  return <div className="admin">
   <aside>
    <div className="brand"><span>EC</span><div><b>Elliot Controls</b><small>Office Admin</small></div></div>
-   <nav>{(['dashboard','payroll','staff','jobqr','integrations'] as Tab[]).map(t=><button key={t} className={tab===t?'active':''} onClick={()=>setTab(t)}>{t==='jobqr'?'Job QR Codes':t[0].toUpperCase()+t.slice(1)}</button>)}</nav>
+   <nav>{(['dashboard','live','qa','payroll','staff','jobqr','integrations'] as Tab[]).map(t=><button key={t} className={tab===t?'active':''} onClick={()=>setTab(t)}>{t==='jobqr'?'Job QR Codes':t==='live'?'Live Team':t==='qa'?'QA / Defects':t[0].toUpperCase()+t.slice(1)}</button>)}</nav>
    <div className="bottom"><a href="/">Worker App</a><button onClick={logout}>Sign out</button></div>
   </aside>
   <main>
-   <header className="admintop"><div><span>OFFICE ADMIN</span><h1>{tab==='jobqr'?'Job QR Codes':tab[0].toUpperCase()+tab.slice(1)}</h1></div><div className="weeks"><button onClick={()=>setOffset(v=>v-1)}>←</button><b>{week.label}</b><button onClick={()=>setOffset(v=>v+1)}>→</button></div></header>
+   <header className="admintop"><div><span>OFFICE ADMIN</span><h1>{tab==='jobqr'?'Job QR Codes':tab==='live'?'Live Workforce':tab==='qa'?'QA / Defects':tab[0].toUpperCase()+tab.slice(1)}</h1></div><div className="weeks"><button onClick={()=>setOffset(v=>v-1)}>←</button><b>{week.label}</b><button onClick={()=>setOffset(v=>v+1)}>→</button></div></header>
    {message&&<div className="message">{message}</div>}
 
    {tab==='dashboard'&&<>
@@ -257,6 +270,18 @@ export default function AdminApp(){
      })}
     </section>
    </>}
+
+
+   {tab==='live'&&<>
+    <section className="metrics"><Metric l="Clocked on now" v={liveClocks.length}/><Metric l="Projects active" v={new Set(liveClocks.map(c=>c.jobNumber)).size}/><Metric l="Staff accounts" v={active.length}/><Metric l="Awaiting approval" v={pendingPeople}/></section>
+    <section className="panel live-workforce-panel"><div className="panelhead"><div><span>LIVE WORKFORCE</span><h2>Who's on site now</h2><p className="payroll-note">Updates every 30 seconds. Workers clock on from the project QR or job search.</p></div><button onClick={loadLive}>Refresh</button></div>{liveClocks.length===0?<div className="empty-team"><b>No one is clocked on right now.</b><span>When a worker clocks on, they will appear here immediately.</span></div>:<div className="live-workforce-grid">{liveClocks.map(c=><div className="live-person-card" key={c.id}><div className="live-dot"></div><div><b>{c.employee}</b><span>Job #{c.jobNumber} — {c.jobName}</span><small>Started {c.startLocal} • {c.date}</small></div><strong>{clockElapsed(c.startedAt)}</strong></div>)}</div>}</section>
+   </>}
+
+   {tab==='qa'&&<section className="panel qa-admin-panel"><div className="panelhead"><div><span>QA / COMMISSIONING</span><h2>Project quality dashboard</h2><p className="payroll-note">BMS and Electrical installed-item QA, evidence photos and open defects.</p></div><button onClick={loadQaAdmin}>Refresh</button></div>
+    <div className="qa-admin-metrics"><div><span>QA items</span><b>{qaInspections.length}</b></div><div><span>BMS</span><b>{qaInspections.filter(x=>x.discipline==='BMS').length}</b></div><div><span>Electrical</span><b>{qaInspections.filter(x=>x.discipline==='Electrical').length}</b></div><div className="attention"><span>Open defects</span><b>{qaInspections.reduce((a,x)=>a+x.items.filter(i=>i.defectOpen).length,0)}</b></div></div>
+    <div className="qa-admin-filters"><button className={qaFilter==='all'?'active':''} onClick={()=>setQaFilter('all')}>All</button><button className={qaFilter==='BMS'?'active':''} onClick={()=>setQaFilter('BMS')}>BMS</button><button className={qaFilter==='Electrical'?'active':''} onClick={()=>setQaFilter('Electrical')}>Electrical</button><button className={qaFilter==='defects'?'active':''} onClick={()=>setQaFilter('defects')}>Open defects</button></div>
+    <div className="qa-admin-list">{qaInspections.filter(x=>qaFilter==='all'||qaFilter===x.discipline||(qaFilter==='defects'&&x.items.some(i=>i.defectOpen))).map(ins=>{const done=ins.items.filter(i=>i.result!=='Pending').length,pass=ins.items.filter(i=>i.result==='Pass').length,defects=ins.items.filter(i=>i.defectOpen).length,photos=ins.items.reduce((a,i)=>a+i.photoIds.length,0),pct=Math.round(done/Math.max(1,ins.items.length)*100);return <article className="qa-admin-card" key={ins.id}><div className="qa-admin-card-head"><div><span>{ins.discipline} • Job #{ins.jobNumber} • {ins.area||'No area'}</span><b>{ins.assetTag||ins.title||ins.templateName}</b><small>{ins.templateName} • by {ins.createdBy}</small></div><div><strong>{pct}%</strong><span>{pass} pass • {photos} photos</span></div></div><div className="qa-progress"><i style={{width:`${pct}%`}}></i></div>{defects>0&&<div className="qa-defect-banner">⚠ {defects} open defect{defects===1?'':'s'}</div>}<div className="qa-admin-items">{ins.items.filter(i=>i.result!=='Pending'||i.defectOpen).slice(0,8).map(i=><div key={i.key}><span className={`qa-mini-result ${i.result.toLowerCase().replace('/','')}`}>{i.result}</span><b>{i.label}</b>{i.reading&&<small>{i.reading}</small>}{i.photoIds.length>0&&<div className="qa-admin-photos">{i.photoIds.slice(0,4).map(id=><a href={`/api/qa/photos/${id}`} target="_blank" rel="noreferrer" key={id}><img src={`/api/qa/photos/${id}`} alt="QA evidence"/></a>)}</div>}</div>)}</div><a className="qa-open-job" href={`/?job=${encodeURIComponent(ins.jobNumber)}`}>Open project in Team App →</a></article>})}</div>
+   </section>}
 
    {tab==='payroll'&&<>
     <section className="payhero"><div><span>WEDNESDAY → TUESDAY</span><h2>Payroll Preview</h2><p>All entered time appears immediately. Only Approved for Payroll hours are exported to Wages.xlsx.</p></div><div className="payroll-actions"><button className="primary" onClick={generateWages}>Generate Wages.xlsx</button><button className="secondary-dark" onClick={exportCsv}>Export Approved CSV</button></div></section>
