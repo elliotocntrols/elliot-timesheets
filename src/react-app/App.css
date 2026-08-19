@@ -51,3 +51,14 @@
 .admin-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.admin-edit-grid label{display:grid;gap:4px;font-size:11px;font-weight:800}.admin-edit-grid input,.admin-edit-grid select{min-height:42px;border:1px solid #d7e0e6;border-radius:9px;padding:8px;background:#fff}.admin-edit-grid .wide{grid-column:1/-1}
 .admin-edit-footer{display:flex;justify-content:space-between;align-items:center;margin-top:14px}.admin-edit-footer>span{font-size:20px;font-weight:900}.admin-edit-footer>div{display:flex;gap:7px}.admin-edit-footer button{border:1px solid #d7e0e6;background:#fff;border-radius:9px;padding:9px 12px}.admin-edit-footer .primary{border:0;background:linear-gradient(135deg,#ffb100,#ff8f00)}
 @media(max-width:700px){.admin-day-card{align-items:flex-start;flex-direction:column!important}.admin-day-actions{width:100%}.admin-day-actions button{flex:1}.admin-edit-grid{grid-template-columns:1fr}.admin-edit-grid .wide{grid-column:auto}}
+
+/* Collapsible employee approval cards */
+.person-approval-head{cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.person-approval-head:hover{background:rgba(15,23,42,.025)}
+.person-approval-toggle{display:flex;align-items:center;gap:12px;width:100%;min-width:0}
+.person-approval-chevron{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:#f1f5f9;font-size:13px;transition:transform .18s ease;flex:0 0 auto}
+.person-approval.open .person-approval-chevron{transform:rotate(90deg)}
+.person-approval-summary{margin-left:auto;white-space:nowrap;font-weight:700;font-size:13px}
+.person-approval .approval-days{display:none}
+.person-approval.open .approval-days{display:block}
+@media(max-width:700px){.person-approval-summary{white-space:normal;text-align:right;font-size:12px}.person-approval-head{padding:12px}.person-approval-toggle{gap:8px}}
